@@ -3,43 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-<title>Rift Stand: iPhone Survival Prototype</title>
+<title>Rift Stand: True 3D Prototype</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0; width: 100%; height: 100%; overflow: hidden; background: #050607;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; touch-action: none;
-    overscroll-behavior: none; -webkit-user-select: none; user-select: none;
-    -webkit-touch-callout: none;
-  }
-  body { position: fixed; inset: 0; }
-  #game { width: 100vw; height: 100vh; height: 100svh; display: block; touch-action: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #050607; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  #game { width: 100vw; height: 100vh; display: block; }
   .hud { position: fixed; inset: 0; pointer-events: none; color: #f7efe2; text-shadow: 0 2px 4px #000; }
   .top {
-    position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px;
+    position: absolute; top: 12px; left: 16px; right: 16px;
     display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px;
-    font-size: clamp(12px, 3.2vw, 15px); font-weight: 900; align-items: start;
+    font-size: 14px; font-weight: 800; align-items: start;
   }
-  .top > div:nth-child(2) { text-align: center; white-space: nowrap; font-size: clamp(11px, 2.8vw, 13px); color: #78f4ff; }
+  .top > div:nth-child(2) { text-align: center; white-space: nowrap; font-size: 13px; }
   .top > div:last-child { text-align: right; }
-  .healthPanel {
-    position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + 42px); left: 12px; right: 12px;
-    display: grid; gap: 8px; max-width: 460px; margin: 0 auto;
+  @media (max-width: 700px) {
+    .top { font-size: 12px; gap: 6px; }
+    .top > div:nth-child(2) { font-size: 10px; }
   }
-  .playerBar { background: rgba(0,0,0,.58); border: 1px solid rgba(255,255,255,.22); padding: 8px; border-radius: 8px; }
+  .healthPanel { position: absolute; left: 16px; bottom: 16px; display: grid; gap: 9px; width: min(420px, calc(100vw - 32px)); }
+  .playerBar { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.18); padding: 8px; }
   .barLabel { display: flex; justify-content: space-between; font-size: 12px; font-weight: 900; margin-bottom: 5px; }
-  .barTrack { height: 15px; background: #351212; overflow: hidden; border-radius: 999px; }
+  .barTrack { height: 13px; background: #351212; overflow: hidden; }
   .barFill { height: 100%; width: 100%; background: linear-gradient(90deg, #58f076, #e4ff73); transition: width .12s linear; }
-  .effectText { color: #7df7ff; font-size: 11px; min-height: 13px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .effectText { color: #7df7ff; font-size: 11px; min-height: 13px; margin-top: 4px; }
   .centerMsg {
-    position: absolute; top: 26%; left: 50%; transform: translate(-50%, -50%);
-    width: min(760px, calc(100vw - 28px)); text-align: center; font-weight: 950;
-    text-transform: uppercase; letter-spacing: 1px; pointer-events: none; z-index: 4;
+    position: absolute; top: 21%; left: 50%; transform: translate(-50%, -50%);
+    width: min(760px, calc(100vw - 32px)); text-align: center; font-weight: 950;
+    text-transform: uppercase; letter-spacing: 1px; pointer-events: none;
     filter: drop-shadow(0 4px 8px rgba(0,0,0,.85));
   }
-  .centerMsg .main { color: #f7efe2; font-size: clamp(28px, 9vw, 58px); line-height: .95; }
-  .centerMsg .sub { color: #78f4ff; font-size: clamp(13px, 3.8vw, 20px); margin-top: 9px; }
+  .centerMsg .main { color: #f7efe2; font-size: clamp(34px, 6vw, 72px); line-height: .92; }
+  .centerMsg .sub { color: #78f4ff; font-size: clamp(14px, 2vw, 24px); margin-top: 10px; }
   .centerMsg.boss .main { color: #ff7d43; }
   .centerMsg.clear .main { color: #6ff072; }
   .centerMsg.map .main { color: #78f4ff; }
@@ -54,47 +47,14 @@
     pointer-events: none; transition: opacity .08s linear;
   }
   .menu, .over, .pause {
-    position: absolute; inset: 0; display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
-    background: radial-gradient(circle at 50% 35%, rgba(19,37,38,.42), rgba(0,0,0,.82));
-    pointer-events: auto; z-index: 8;
+    position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(circle, rgba(0,0,0,.18), rgba(0,0,0,.72));
+    pointer-events: auto;
   }
-  .panel { text-align: center; color: #f7efe2; width: min(440px, 100%); }
-  h1 { margin: 0 0 10px; color: #77f4ff; font-size: clamp(44px, 14vw, 70px); line-height: .9; letter-spacing: 1px; }
-  p { margin: 0 0 18px; color: #d9cbbb; font-size: 14px; line-height: 1.45; }
-  .controlCopy { display: grid; gap: 8px; margin: 20px auto 22px; color: #f7efe2; font-weight: 800; font-size: 14px; }
-  button {
-    border: 0; min-height: 54px; margin: 8px; padding: 15px 26px; border-radius: 999px;
-    font: 900 16px ui-monospace, monospace; color: #071015; background: #75f4ff;
-    cursor: pointer; touch-action: manipulation;
-  }
-  .secondaryButton { background: #f4e7c6; }
-  .touchControls { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
-  .joystick {
-    position: absolute; left: max(22px, env(safe-area-inset-left)); bottom: calc(max(24px, env(safe-area-inset-bottom)) + 14px);
-    width: 136px; height: 136px; border-radius: 50%; border: 2px solid rgba(120,244,255,.46);
-    background: rgba(6,18,22,.38); box-shadow: inset 0 0 24px rgba(120,244,255,.12), 0 8px 24px rgba(0,0,0,.45);
-    pointer-events: auto; touch-action: none;
-  }
-  .stick {
-    position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; border-radius: 50%;
-    transform: translate(-50%, -50%); background: rgba(120,244,255,.76);
-    border: 2px solid rgba(255,255,255,.7); box-shadow: 0 8px 18px rgba(0,0,0,.5);
-  }
-  .fireButton {
-    position: absolute; right: max(22px, env(safe-area-inset-right)); bottom: calc(max(26px, env(safe-area-inset-bottom)) + 18px);
-    width: 126px; height: 126px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55);
-    background: radial-gradient(circle, rgba(255,111,36,.95), rgba(156,38,20,.88));
-    color: #fff7df; display: grid; place-items: center; font-size: 18px; font-weight: 950; letter-spacing: 1px;
-    pointer-events: auto; touch-action: none; box-shadow: 0 8px 26px rgba(0,0,0,.5);
-  }
-  .fireButton.active { transform: scale(.96); filter: brightness(1.18); }
-  .rotateNotice {
-    position: absolute; inset: 0; display: none; place-items: center; padding: 28px; text-align: center;
-    background: rgba(0,0,0,.86); color: #f7efe2; font-weight: 900; z-index: 12; pointer-events: none;
-  }
-  @media (orientation: landscape) and (max-height: 520px) {
-    .rotateNotice { display: grid; }
-  }
+  .panel { text-align: center; color: #f7efe2; }
+  h1 { margin: 0 0 10px; color: #77f4ff; font-size: clamp(42px, 7vw, 86px); letter-spacing: 1px; }
+  p { margin: 0 0 22px; color: #d9cbbb; }
+  button { border: 0; margin: 8px; padding: 14px 26px; font: 900 16px ui-monospace, monospace; color: #071015; background: #75f4ff; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  button:nth-child(2) { background: #6ff072; }
   .hidden { display: none; }
 </style>
 </head>
@@ -103,36 +63,33 @@
 <div class="hud">
   <div class="top">
     <div id="leftHud">SCORE 0<br>WAVE 1</div>
-    <div>RIFT STAND</div>
-    <div id="rightHud">ZONE 1<br>HP 100</div>
+    <div>TRUE 3D MOVEMENT TEST</div>
+    <div id="rightHud">P1 100</div>
   </div>
   <div id="fadeOverlay" class="fadeOverlay"></div>
   <div id="centerMsg" class="centerMsg hidden"><div class="main"></div><div class="sub"></div></div>
   <div class="healthPanel">
     <div id="p1Bar" class="playerBar">
-      <div class="barLabel"><span>HP</span><span id="p1Hp">100</span></div>
+      <div class="barLabel"><span>P1</span><span id="p1Hp">100</span></div>
       <div class="barTrack"><div id="p1Fill" class="barFill"></div></div>
       <div id="p1Effects" class="effectText"></div>
+    </div>
+    <div id="p2Bar" class="playerBar hidden">
+      <div class="barLabel"><span>P2</span><span id="p2Hp">100</span></div>
+      <div class="barTrack"><div id="p2Fill" class="barFill"></div></div>
+      <div id="p2Effects" class="effectText"></div>
     </div>
   </div>
   <div id="menu" class="menu">
     <div class="panel">
-      <h1>RIFT STAND</h1>
-      <p>Mobile zombie survival prototype.</p>
-      <div class="controlCopy">
-        <div>Move with left joystick</div>
-        <div>Hold right button to fire</div>
-      </div>
-      <button id="startButton">START GAME</button>
+      <h1>RIFT STAND 3D</h1>
+      <p>Actual 3D characters, articulated movement, road and sidewalk arena.</p>
+      <button id="one">1 PLAYER</button>
+      <button id="two">2 PLAYERS</button>
     </div>
   </div>
   <div id="pause" class="pause hidden"><div class="panel"><h1>PAUSED</h1><p>Press P to resume</p></div></div>
-  <div id="over" class="over hidden"><div class="panel"><h1>GAME OVER</h1><p id="overText"></p><button id="again">RESTART</button><button id="menuButton" class="secondaryButton">MENU</button></div></div>
-  <div id="touchControls" class="touchControls hidden">
-    <div id="joystickBase" class="joystick"><div id="joystickThumb" class="stick"></div></div>
-    <div id="fireButton" class="fireButton">FIRE</div>
-  </div>
-  <div id="rotateNotice" class="rotateNotice">Rotate to portrait for the best iPhone play.</div>
+  <div id="over" class="over hidden"><div class="panel"><h1>SQUAD LOST</h1><p id="overText"></p><button id="again">RESTART</button></div></div>
 </div>
 
 <script type="module">
@@ -149,7 +106,7 @@ const CFG = {
   gateOpenTime: 3.4, spawnStagger: .42, powerupFloatY: 1.18, bombRadius: 12,
   weaponDuration: 45, crossbowCD: .72, arrowSpeed: 30, arrowLife: 1.6, arrowBlastRadius: 4.2, arrowDamage: 95,
   swordCD: .34, swordRange: 4.4, swordDamage: 105,
-  powerupMin: 12, powerupMax: 18, rapidDuration: 7, shieldDuration: 6
+  powerupMin: 12, powerupMax: 18, rapidDuration: 7, shieldDuration: 6, reviveTime: 3.0, reviveDist: 5.2
 };
 
 const ITEM_INFO = {
@@ -189,7 +146,7 @@ streetGlow.position.set(0, 9, 0);
 scene.add(streetGlow);
 
 const keys = {};
-let phase = "menu", mode = 1, wave = 0, score = 0, last = 0, startLocked = false, survivalStart = 0, survivalSeconds = 0;
+let phase = "menu", mode = 1, wave = 0, score = 0, last = 0;
 let players = [], zombies = [], bullets = [], impacts = [], stunBursts = [], powerups = [], corpses = [], flames = [], walls = [], wallBounds = [], spawnQueue = [];
 let nextPowerup = 10, betweenWaves = false, waveTimer = 0, centerMsgTimer = 0, screenShake = 0;
 let currentMapIndex = 0, currentZone = 1, fadeTimer = 0, fadeMax = 1, breakMain = "", breakSub = "", breakTone = "clear";
@@ -197,14 +154,6 @@ const centerMsg = document.getElementById("centerMsg");
 const centerMain = centerMsg.querySelector(".main");
 const centerSub = centerMsg.querySelector(".sub");
 const fadeOverlay = document.getElementById("fadeOverlay");
-const touchControls = document.getElementById("touchControls");
-const joystickBase = document.getElementById("joystickBase");
-const joystickThumb = document.getElementById("joystickThumb");
-const fireButton = document.getElementById("fireButton");
-const mobileInput = {
-  movePointer: null, firePointer: null, x: 0, y: 0, mag: 0, fire: false,
-  lastMoveDir: new THREE.Vector3(0, 0, -1)
-};
 const BASE_NAV_POINTS = [
   [-36,-26],[-18,-26],[0,-26],[18,-26],[36,-26],
   [-36,-9],[-18,-9],[0,-9],[18,-9],[36,-9],
@@ -245,110 +194,33 @@ function rand(a, b) { return a + Math.random() * (b - a); }
 document.addEventListener("keydown", e => {
   keys[e.code] = true;
   if (["Space","Enter","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
-  if ((e.code === "Enter" || e.code === "Digit1") && phase === "menu") safeStartGame();
+  if (e.code === "Digit1" && phase === "menu") start(1);
+  if (e.code === "Digit2" && phase === "menu") start(2);
   if (e.code === "KeyP" && phase !== "menu" && phase !== "over") setPhase(phase === "pause" ? "play" : "pause");
-  if (e.code === "KeyR" && phase !== "menu") start();
+  if (e.code === "KeyR" && phase !== "menu") start(mode);
 });
 document.addEventListener("keyup", e => keys[e.code] = false);
-document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-document.addEventListener("gesturestart", e => e.preventDefault());
-document.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("touchmove", e => {
+  if (phase !== "menu") e.preventDefault();
+}, { passive: false });
 
-function bindPressButton(id, action) {
+function bindStartButton(id, getMode) {
   const button = document.getElementById(id);
-  let lastPress = 0;
+  let lastStart = 0;
   const begin = e => {
     e.preventDefault();
     const now = performance.now();
-    if (now - lastPress < 350) return;
-    lastPress = now;
-    action();
+    if (now - lastStart < 350) return;
+    lastStart = now;
+    start(getMode());
   };
   button.addEventListener("pointerdown", begin, { passive: false });
-  button.addEventListener("touchend", begin, { passive: false });
+  button.addEventListener("touchstart", begin, { passive: false });
   button.addEventListener("click", begin);
 }
-bindPressButton("startButton", safeStartGame);
-bindPressButton("again", () => start());
-bindPressButton("menuButton", () => {
-  cleanupDynamic();
-  setPhase("menu");
-});
-
-async function safeStartGame() {
-  if (startLocked) return;
-  startLocked = true;
-  try {
-    await initAudioSafely();
-  } catch (err) {
-    console.warn("Audio unavailable; continuing silently.", err);
-  }
-  start();
-  setTimeout(() => startLocked = false, 500);
-}
-
-async function initAudioSafely() {
-  const ctx = window.__riftAudioContext;
-  if (ctx && ctx.state === "suspended") await ctx.resume();
-}
-
-function bindTouchControls() {
-  joystickBase.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    mobileInput.movePointer = e.pointerId;
-    joystickBase.setPointerCapture?.(e.pointerId);
-    updateJoystick(e);
-  }, { passive: false });
-  fireButton.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    mobileInput.firePointer = e.pointerId;
-    mobileInput.fire = true;
-    fireButton.classList.add("active");
-    fireButton.setPointerCapture?.(e.pointerId);
-  }, { passive: false });
-  document.addEventListener("pointermove", e => {
-    if (e.pointerId === mobileInput.movePointer) {
-      e.preventDefault();
-      updateJoystick(e);
-    }
-  }, { passive: false });
-  document.addEventListener("pointerup", releasePointer, { passive: false });
-  document.addEventListener("pointercancel", releasePointer, { passive: false });
-}
-
-function updateJoystick(e) {
-  const rect = joystickBase.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const radius = rect.width * .38;
-  let dx = e.clientX - cx;
-  let dy = e.clientY - cy;
-  const dist = Math.hypot(dx, dy);
-  if (dist > radius) {
-    dx = dx / dist * radius;
-    dy = dy / dist * radius;
-  }
-  mobileInput.x = dx / radius;
-  mobileInput.y = dy / radius;
-  mobileInput.mag = Math.min(1, dist / radius);
-  joystickThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-}
-
-function releasePointer(e) {
-  if (e.pointerId === mobileInput.movePointer) {
-    mobileInput.movePointer = null;
-    mobileInput.x = 0;
-    mobileInput.y = 0;
-    mobileInput.mag = 0;
-    joystickThumb.style.transform = "translate(-50%, -50%)";
-  }
-  if (e.pointerId === mobileInput.firePointer) {
-    mobileInput.firePointer = null;
-    mobileInput.fire = false;
-    fireButton.classList.remove("active");
-  }
-}
-bindTouchControls();
+bindStartButton("one", () => 1);
+bindStartButton("two", () => 2);
+bindStartButton("again", () => mode);
 
 function mat(color, rough=0.72, metal=0.05) {
   return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
@@ -621,7 +493,7 @@ function makePlayer(idx, x, z, rot) {
   const root = new THREE.Group();
   root.position.set(x,0,z); root.rotation.y = rot;
   root.userData = { idx, hp: CFG.playerHP, lastShot: -99, walk: Math.random()*10, moving:0, recoil:0, down:false,
-    rapidUntil:0, shieldUntil:0, hurtUntil:0, weapon:"raygun", weaponUntil:0, slashSide:1 };
+    revive:0, rapidUntil:0, shieldUntil:0, hurtUntil:0, weapon:"raygun", weaponUntil:0, slashSide:1 };
 
   const skin = mat(isP1 ? 0x8a5a35 : 0x9a6a43);
   const outfit = mat(isP1 ? 0xffc531 : 0x31d66b, .35, isP1 ? .75 : .1);
@@ -877,15 +749,18 @@ function detailZombie(root, type, skin, cloth) {
   }
 }
 
-function start() {
+function start(count) {
   cleanupDynamic();
-  mode = 1; wave = 0; score = 0; phase = "play"; betweenWaves = false; waveTimer = 0; screenShake = 0; survivalStart = last || 0; survivalSeconds = 0; setPhase("play");
+  mode = count; wave = 0; score = 0; phase = "play"; betweenWaves = false; waveTimer = 0; screenShake = 0; setPhase("play");
   currentMapIndex = 0; currentZone = 1; fadeTimer = 0; breakMain = ""; breakSub = ""; breakTone = "clear";
   loadMapLayout(0);
   const layout = MAP_LAYOUTS[currentMapIndex];
   const p1 = layout.spawns[0];
+  const p2 = layout.spawns[1] || layout.spawns[0];
   players = [makePlayer(0,p1[0],p1[1],p1[2])];
+  if (count === 2) players.push(makePlayer(1,p2[0],p2[1],p2[2]));
   nextPowerup = rand(CFG.powerupMin, CFG.powerupMax);
+  document.getElementById("p2Bar").classList.toggle("hidden", count !== 2);
   nextWave();
 }
 function cleanupDynamic() {
@@ -1147,34 +1022,9 @@ function update(dt, now) {
   }
   updateFade(dt);
   screenShake = Math.max(0, screenShake - dt * 1.7);
-  survivalSeconds = Math.max(0, now - survivalStart);
-  if (players.length && players.every(p => p.userData.down || p.userData.hp <= 0)) endGame();
+  if (players.every(p => p.userData.down || p.userData.hp <= 0)) { setPhase("over"); document.getElementById("overText").textContent = `Score ${score} | Wave ${wave}`; }
   updateHud(now);
 }
-function endGame() {
-  setPhase("over");
-  const minutes = Math.floor(survivalSeconds / 60);
-  const seconds = Math.floor(survivalSeconds % 60).toString().padStart(2, "0");
-  document.getElementById("overText").innerHTML = `Final score ${score}<br>Wave ${wave} | Zone ${currentZone}<br>Survived ${minutes}:${seconds}`;
-}
-function mobileMoveVector(player) {
-  if (mobileInput.mag <= .08) return null;
-  const cam = cameras[0];
-  const camForward = new THREE.Vector3();
-  if (cam) cam.getWorldDirection(camForward);
-  if (camForward.lengthSq() < .001) camForward.copy(forward(player));
-  camForward.y = 0;
-  if (camForward.lengthSq() < .001) camForward.set(0, 0, -1);
-  camForward.normalize();
-  const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
-  const dir = camForward.multiplyScalar(-mobileInput.y).add(camRight.multiplyScalar(mobileInput.x));
-  dir.y = 0;
-  if (dir.lengthSq() < .001) return null;
-  dir.normalize();
-  mobileInput.lastMoveDir.copy(dir);
-  return { dir, amount: THREE.MathUtils.clamp(mobileInput.mag, 0, 1) };
-}
-
 function updatePlayers(dt, now) {
   players.forEach(p => {
     const u = p.userData;
@@ -1183,35 +1033,41 @@ function updatePlayers(dt, now) {
       if (u.parts?.shield) u.parts.shield.visible = false;
       u.moving = 0;
       p.rotation.z = THREE.MathUtils.lerp(p.rotation.z, .9, dt * 5);
+      let reviving = false;
+      for (const o of players) {
+        if (o === p || o.userData.down || o.userData.hp <= 0) continue;
+        if (o.position.distanceTo(p.position) < CFG.reviveDist) {
+          reviving = true;
+          u.revive += dt / CFG.reviveTime;
+          if (u.revive >= 1) {
+            u.down = false;
+            u.hp = Math.min(CFG.playerHP, 42);
+            u.revive = 0;
+            p.rotation.z = 0;
+            stunSplash(p.position.clone().add(new THREE.Vector3(0,2,0)), p);
+          }
+        }
+      }
+      if (!reviving) u.revive = Math.max(0, u.revive - dt / CFG.reviveTime);
       return;
     }
     u.recoil = Math.max(0, u.recoil - dt*6);
     if (u.weapon !== "raygun" && now > u.weaponUntil) setPlayerWeapon(p, "raygun", now);
-    const mobileMove = mobileMoveVector(p);
-    const left = keys.KeyA || keys.ArrowLeft, right = keys.KeyD || keys.ArrowRight;
-    const up = keys.KeyW || keys.ArrowUp, down = keys.KeyS || keys.ArrowDown;
-    let movingAmount = 0;
-    if (mobileMove) {
-      faceDirection(p, mobileMove.dir);
-      movingAmount = mobileMove.amount;
-      moveWithCollisions(p, mobileMove.dir.x * CFG.playerSpeed * 1.04 * movingAmount * dt, mobileMove.dir.z * CFG.playerSpeed * 1.04 * movingAmount * dt, .72);
-    } else {
-      if (left) p.rotation.y += CFG.turnSpeed * dt;
-      if (right) p.rotation.y -= CFG.turnSpeed * dt;
-      const thrust = (up?1:0) - (down?.55:0);
-      movingAmount = Math.abs(thrust);
-      if (thrust) {
-        const f = forward(p);
-        mobileInput.lastMoveDir.copy(thrust > 0 ? f : f.clone().multiplyScalar(-1));
-        moveWithCollisions(p, f.x * CFG.playerSpeed * thrust * dt, f.z * CFG.playerSpeed * thrust * dt, .72);
-      }
+    const left = u.idx ? keys.ArrowLeft : keys.KeyA, right = u.idx ? keys.ArrowRight : keys.KeyD;
+    const up = u.idx ? keys.ArrowUp : keys.KeyW, down = u.idx ? keys.ArrowDown : keys.KeyS;
+    if (left) p.rotation.y += CFG.turnSpeed * dt;
+    if (right) p.rotation.y -= CFG.turnSpeed * dt;
+    const thrust = (up?1:0) - (down?.55:0);
+    u.moving = THREE.MathUtils.clamp(u.moving + (Math.abs(thrust)>0 ? dt*6 : -dt*5), 0, 1);
+    u.walk += (Math.abs(thrust)*9 + .7) * dt;
+    if (thrust) {
+      const f = forward(p);
+      moveWithCollisions(p, f.x * CFG.playerSpeed * thrust * dt, f.z * CFG.playerSpeed * thrust * dt, .72);
     }
-    u.moving = THREE.MathUtils.clamp(u.moving + (movingAmount > 0 ? dt*6 : -dt*5), 0, 1);
-    u.walk += (movingAmount*9 + .7) * dt;
     animateHumanoid(p, u.walk, u.moving, u.recoil);
     if (u.parts?.shield) u.parts.shield.visible = now < u.shieldUntil;
     const cd = u.weapon === "sword" ? CFG.swordCD : u.weapon === "crossbow" ? CFG.crossbowCD : now < u.rapidUntil ? CFG.shootCD * .42 : CFG.shootCD;
-    if ((mobileInput.fire || keys.Space || keys.Enter) && now-u.lastShot > cd) shoot(p, now);
+    if ((u.idx ? keys.Enter : keys.Space) && now-u.lastShot > cd) shoot(p, now);
   });
 }
 function animateHumanoid(root, walk, moving, recoil=0) {
@@ -1242,14 +1098,8 @@ function animateZombie(root, walk, moving, recoil=0, stunned=false) {
     p.rArm.rotation.z -= .35;
   }
 }
-function manualAimDirection(player) {
-  if (mobileInput.lastMoveDir.lengthSq() > .001) return mobileInput.lastMoveDir.clone().normalize();
-  return forward(player).normalize();
-}
 function shoot(p, now) {
   const u = p.userData; u.lastShot = now; u.recoil = 1;
-  const f = manualAimDirection(p);
-  faceDirection(p, f);
   if (u.weapon === "sword") {
     swordSlash(p, now);
     return;
@@ -1258,9 +1108,9 @@ function shoot(p, now) {
     shootCrossbow(p);
     return;
   }
-  const pos = p.position.clone().add(new THREE.Vector3(0,2.55,0)).addScaledVector(f,1.45);
+  const f = forward(p), pos = p.position.clone().add(new THREE.Vector3(0,2.55,0)).addScaledVector(f,1.45);
   const b = sphere(.18,0x77f4ff,16); b.material = new THREE.MeshBasicMaterial({color:0x8fffff});
-  b.position.copy(pos); b.userData = { vel:f.clone().multiplyScalar(CFG.bulletSpeed), life:CFG.bulletLife };
+  b.position.copy(pos); b.userData = { vel:f.multiplyScalar(CFG.bulletSpeed), life:CFG.bulletLife };
   const light = new THREE.PointLight(0x72f7ff, 1.4, 5); b.add(light);
   scene.add(b); bullets.push(b);
 }
@@ -1885,7 +1735,7 @@ function updatePowerups(dt, now) {
     pu.position.y = CFG.powerupFloatY + Math.sin(pu.userData.bob) * .24;
     for (const p of players) {
       if (p.userData.down || p.userData.hp <= 0) continue;
-      if (p.position.distanceTo(pu.position) < 3.05) {
+      if (p.position.distanceTo(pu.position) < 2.35) {
         applyPowerup(p, pu.userData.type, now);
         pu.userData.life = 0;
         stunSplash(pu.position.clone().add(new THREE.Vector3(0,.8,0)), pu);
@@ -1998,10 +1848,9 @@ function setGroupOpacity(group, alpha) {
   });
 }
 function updateHud(now) {
-  const player = players[0];
-  document.getElementById("leftHud").innerHTML = `SCORE ${score}<br>WAVE ${wave}${betweenWaves ? ` | NEXT ${Math.ceil(waveTimer)}` : ""}`;
-  document.getElementById("rightHud").innerHTML = `ZONE ${currentZone}<br>HP ${player ? Math.max(0, Math.ceil(player.userData.hp)) : CFG.playerHP}`;
-  for (let i=0;i<1;i++) {
+  document.getElementById("leftHud").innerHTML = `SCORE ${score}<br>WAVE ${wave} | ZONE ${currentZone}${betweenWaves ? ` | NEXT ${Math.ceil(waveTimer)}` : ""}`;
+  document.getElementById("rightHud").textContent = players.map(p => `P${p.userData.idx+1} ${p.userData.down ? "DOWN" : Math.max(0, Math.ceil(p.userData.hp))}`).join("   ");
+  for (let i=0;i<2;i++) {
     const p = players[i];
     const boxEl = document.getElementById(`p${i+1}Bar`);
     const hpEl = document.getElementById(`p${i+1}Hp`);
@@ -2014,13 +1863,14 @@ function updateHud(now) {
     boxEl.classList.remove("hidden");
     const u = p.userData;
     const pct = Math.max(0, u.hp) / CFG.playerHP * 100;
-    hpEl.textContent = u.down ? "DOWN" : `${Math.ceil(u.hp)}`;
+    hpEl.textContent = u.down ? `DOWN ${Math.ceil(u.revive*100)}%` : `${Math.ceil(u.hp)}`;
     fillEl.style.width = `${pct}%`;
     fillEl.style.background = u.down ? "#555" : pct > 50 ? "linear-gradient(90deg,#58f076,#e4ff73)" : pct > 25 ? "#ffbc42" : "#ff4f4f";
     const effects = [];
     if (now < u.rapidUntil) effects.push(`RAPID ${Math.ceil(u.rapidUntil-now)}s`);
     if (now < u.shieldUntil) effects.push(`SHIELD ${Math.ceil(u.shieldUntil-now)}s`);
     if (u.weapon !== "raygun" && now < u.weaponUntil) effects.push(`${u.weapon.toUpperCase()} ${Math.ceil(u.weaponUntil-now)}s`);
+    if (u.down) effects.push("ALLY REVIVE NEEDED");
     effEl.textContent = effects.join("  ");
   }
 }
@@ -2035,17 +1885,6 @@ function setPhase(p) {
   document.getElementById("menu").classList.toggle("hidden", p !== "menu");
   document.getElementById("pause").classList.toggle("hidden", p !== "pause");
   document.getElementById("over").classList.toggle("hidden", p !== "over");
-  touchControls.classList.toggle("hidden", p !== "play");
-  if (p !== "play") {
-    mobileInput.fire = false;
-    mobileInput.firePointer = null;
-    mobileInput.movePointer = null;
-    mobileInput.x = 0;
-    mobileInput.y = 0;
-    mobileInput.mag = 0;
-    fireButton.classList.remove("active");
-    joystickThumb.style.transform = "translate(-50%, -50%)";
-  }
 }
 
 buildWorld();
@@ -2053,18 +1892,13 @@ buildWorld();
 const cameras = [new THREE.PerspectiveCamera(66, 1, .1, 180), new THREE.PerspectiveCamera(66, 1, .1, 180)];
 function placeCamera(cam, p) {
   const f = forward(p), side = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), f).normalize();
-  const portrait = innerHeight >= innerWidth;
-  const back = portrait ? -17 : -13;
-  const sideOffset = portrait ? .8 : 1.8;
-  const height = portrait ? 10.8 : 8.2;
-  const lookAhead = portrait ? 5.8 : 4;
-  cam.position.copy(p.position).addScaledVector(f, back).addScaledVector(side, sideOffset).add(new THREE.Vector3(0,height,0));
+  cam.position.copy(p.position).addScaledVector(f,-13).addScaledVector(side,1.8).add(new THREE.Vector3(0,8.2,0));
   if (screenShake > 0) {
     cam.position.x += rand(-screenShake, screenShake) * .38;
     cam.position.y += rand(-screenShake, screenShake) * .2;
     cam.position.z += rand(-screenShake, screenShake) * .38;
   }
-  const look = p.position.clone().addScaledVector(f, lookAhead).add(new THREE.Vector3(0,2.0,0));
+  const look = p.position.clone().addScaledVector(f, 4).add(new THREE.Vector3(0,2.0,0));
   cam.lookAt(look);
 }
 function render(now) {
@@ -2074,15 +1908,12 @@ function render(now) {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w,h,false);
   renderer.setScissorTest(true);
-  const p = players[0];
-  const cam = cameras[0];
-  cam.aspect = w / h;
-  cam.fov = h >= w ? 72 : 66;
-  cam.updateProjectionMatrix();
-  if (p) placeCamera(cam,p);
-  renderer.setViewport(0,0,w,h);
-  renderer.setScissor(0,0,w,h);
-  renderer.render(scene,cam);
+  const views = mode === 2 && players.length > 1 ? [[0,0,w/2,h,0],[w/2,0,w/2,h,1]] : [[0,0,w,h,0]];
+  views.forEach(([x,y,vw,vh,i]) => {
+    const p = players[i] || players[0];
+    const cam = cameras[i]; cam.aspect = vw/vh; cam.updateProjectionMatrix(); if (p) placeCamera(cam,p);
+    renderer.setViewport(x,y,vw,vh); renderer.setScissor(x,y,vw,vh); renderer.render(scene,cam);
+  });
   renderer.setScissorTest(false);
   requestAnimationFrame(render);
 }
