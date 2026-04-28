@@ -140,7 +140,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.m
 
 const CFG = {
   arenaW: 90, arenaH: 70, playerSpeed: 11, turnSpeed: 2.7,
-  zombieSpeed: 4.1, runnerSpeed: 6.3, bruteSpeed: 2.8,
+  zombieSpeed: 3.65, runnerSpeed: 5.7, bruteSpeed: 2.45,
   playerHP: 100, bulletSpeed: 42, bulletLife: .85, shootCD: .2,
   waveBase: 6, waveAdd: 3, stunTime: .48, corpseTime: 4.0, corpseFade: 1.1,
   waveBreak: 3.0, waveClearBonus: 120, bossClearBonus: 500,
@@ -205,6 +205,7 @@ const mobileInput = {
   movePointer: null, firePointer: null, x: 0, y: 0, mag: 0, fire: false,
   lastMoveDir: new THREE.Vector3(0, 0, -1)
 };
+const cameraRig = { pos: null, look: null, dt: 0 };
 const BASE_NAV_POINTS = [
   [-36,-26],[-18,-26],[0,-26],[18,-26],[36,-26],
   [-36,-9],[-18,-9],[0,-9],[18,-9],[36,-9],
@@ -478,6 +479,7 @@ function transitionToNextMap() {
   loadMapLayout(currentMapIndex + 1);
   clearTransientEffects(true);
   resetPlayersForMap();
+  cameraRig.pos = null; cameraRig.look = null;
   triggerFade(.95);
   screenShake = Math.max(screenShake, .55);
   breakMain = `ZONE ${currentZone}`;
@@ -780,7 +782,7 @@ function makeZombie(type, x, z, gate=null) {
   root.scale.setScalar(scale);
   root.userData = {
     type, hp: boss?900:brute?230:runner?70:100, max: boss?900:brute?230:runner?70:100,
-    speed: boss?1.75:brute?2.8:runner?6.3:4.1, walk:Math.random()*10, hitCD:0, recoil:0, baseScale:scale,
+    speed: boss?1.42:brute?CFG.bruteSpeed:runner?CFG.runnerSpeed:CFG.zombieSpeed, walk:Math.random()*10, hitCD:0, recoil:0, baseScale:scale,
     stun:0, dead:false, flameCD: boss ? rand(2.4, 3.4) : 0, flameWarn:0, flameBurst:0, flameEmit:0, flameTick:0,
     flameDir: new THREE.Vector3(0,0,-1),
     emergeTime: gate ? (boss ? 2.15 : rand(.65, 1.25)) : 0,
@@ -880,6 +882,7 @@ function detailZombie(root, type, skin, cloth) {
 function start() {
   cleanupDynamic();
   mode = 1; wave = 0; score = 0; phase = "play"; betweenWaves = false; waveTimer = 0; screenShake = 0; survivalStart = last || 0; survivalSeconds = 0; setPhase("play");
+  cameraRig.pos = null; cameraRig.look = null;
   currentMapIndex = 0; currentZone = 1; fadeTimer = 0; breakMain = ""; breakSub = ""; breakTone = "clear";
   loadMapLayout(0);
   const layout = MAP_LAYOUTS[currentMapIndex];
@@ -1159,20 +1162,15 @@ function endGame() {
 }
 function mobileMoveVector(player) {
   if (mobileInput.mag <= .08) return null;
-  const cam = cameras[0];
-  const camForward = new THREE.Vector3();
-  if (cam) cam.getWorldDirection(camForward);
-  if (camForward.lengthSq() < .001) camForward.copy(forward(player));
-  camForward.y = 0;
-  if (camForward.lengthSq() < .001) camForward.set(0, 0, -1);
-  camForward.normalize();
-  const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
-  const dir = camForward.multiplyScalar(-mobileInput.y).add(camRight.multiplyScalar(mobileInput.x));
-  dir.y = 0;
-  if (dir.lengthSq() < .001) return null;
-  dir.normalize();
-  mobileInput.lastMoveDir.copy(dir);
-  return { dir, amount: THREE.MathUtils.clamp(mobileInput.mag, 0, 1) };
+  const turn = Math.abs(mobileInput.x) > .09 ? mobileInput.x : 0;
+  const thrust = Math.abs(mobileInput.y) > .09 ? -mobileInput.y : 0;
+  if (!turn && !thrust) return null;
+  return {
+    turn,
+    thrust,
+    amount: THREE.MathUtils.clamp(mobileInput.mag, 0, 1),
+    backpedal: thrust < -.05
+  };
 }
 
 function updatePlayers(dt, now) {
@@ -1192,9 +1190,17 @@ function updatePlayers(dt, now) {
     const up = keys.KeyW || keys.ArrowUp, down = keys.KeyS || keys.ArrowDown;
     let movingAmount = 0;
     if (mobileMove) {
-      faceDirection(p, mobileMove.dir);
-      movingAmount = mobileMove.amount;
-      moveWithCollisions(p, mobileMove.dir.x * CFG.playerSpeed * 1.04 * movingAmount * dt, mobileMove.dir.z * CFG.playerSpeed * 1.04 * movingAmount * dt, .72);
+      if (mobileMove.turn) p.rotation.y -= mobileMove.turn * CFG.turnSpeed * .58 * dt;
+      const thrust = mobileMove.thrust;
+      movingAmount = Math.max(Math.abs(thrust), Math.abs(mobileMove.turn) * .28);
+      if (Math.abs(thrust) > .02) {
+        const f = forward(p);
+        mobileInput.lastMoveDir.copy(f);
+        const speedScale = mobileMove.backpedal ? .56 : .88;
+        moveWithCollisions(p, f.x * CFG.playerSpeed * thrust * speedScale * dt, f.z * CFG.playerSpeed * thrust * speedScale * dt, .72);
+      } else if (mobileMove.turn) {
+        mobileInput.lastMoveDir.copy(forward(p));
+      }
     } else {
       if (left) p.rotation.y += CFG.turnSpeed * dt;
       if (right) p.rotation.y -= CFG.turnSpeed * dt;
@@ -1393,8 +1399,9 @@ function updateZombies(dt, now) {
     updateBossIntro(z, dt, now);
     ensureAliveVisible(z);
     updateBossHealthBar(z);
-    const touchRange = u.type === "boss" ? 2.85 : 1.8;
-    if (d < touchRange) hurtPlayer(target, u.type==="boss" ? 24 : 12, now, z.position, u.type==="boss");
+    const touchRange = u.type === "boss" ? 3.25 : u.type === "brute" ? 2.35 : 2.15;
+    const contactDistance = target.position.distanceTo(z.position);
+    if (contactDistance < touchRange) hurtPlayer(target, u.type==="boss" ? 24 : 12, now, z.position, u.type==="boss");
     const progress = beforeMove.distanceTo(z.position);
     if (d > 4 && progress < .035 && u.stun <= 0) {
       u.stuckTime = (u.stuckTime || 0) + dt;
@@ -2058,18 +2065,28 @@ function placeCamera(cam, p) {
   const sideOffset = portrait ? .8 : 1.8;
   const height = portrait ? 10.8 : 8.2;
   const lookAhead = portrait ? 5.8 : 4;
-  cam.position.copy(p.position).addScaledVector(f, back).addScaledVector(side, sideOffset).add(new THREE.Vector3(0,height,0));
+  const desiredPos = p.position.clone().addScaledVector(f, back).addScaledVector(side, sideOffset).add(new THREE.Vector3(0,height,0));
+  const desiredLook = p.position.clone().addScaledVector(f, lookAhead).add(new THREE.Vector3(0,2.0,0));
+  if (!cameraRig.pos || !cameraRig.look) {
+    cameraRig.pos = desiredPos.clone();
+    cameraRig.look = desiredLook.clone();
+  } else {
+    const alpha = 1 - Math.exp(-cameraRig.dt * 3.2);
+    cameraRig.pos.lerp(desiredPos, alpha);
+    cameraRig.look.lerp(desiredLook, alpha);
+  }
+  cam.position.copy(cameraRig.pos);
   if (screenShake > 0) {
     cam.position.x += rand(-screenShake, screenShake) * .38;
     cam.position.y += rand(-screenShake, screenShake) * .2;
     cam.position.z += rand(-screenShake, screenShake) * .38;
   }
-  const look = p.position.clone().addScaledVector(f, lookAhead).add(new THREE.Vector3(0,2.0,0));
-  cam.lookAt(look);
+  cam.lookAt(cameraRig.look);
 }
 function render(now) {
   now *= .001;
   const dt = Math.min(now-last || 0, .05); last = now;
+  cameraRig.dt = dt;
   update(dt, now);
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w,h,false);
