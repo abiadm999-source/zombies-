@@ -140,7 +140,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.m
 
 const CFG = {
   arenaW: 90, arenaH: 70, playerSpeed: 11, turnSpeed: 2.7,
-  zombieSpeed: 3.65, runnerSpeed: 5.7, bruteSpeed: 2.45,
+  zombieSpeed: 1.825, runnerSpeed: 2.85, bruteSpeed: 1.225,
   playerHP: 100, bulletSpeed: 42, bulletLife: .85, shootCD: .2,
   waveBase: 6, waveAdd: 3, stunTime: .48, corpseTime: 4.0, corpseFade: 1.1,
   waveBreak: 3.0, waveClearBonus: 120, bossClearBonus: 500,
@@ -782,7 +782,7 @@ function makeZombie(type, x, z, gate=null) {
   root.scale.setScalar(scale);
   root.userData = {
     type, hp: boss?900:brute?230:runner?70:100, max: boss?900:brute?230:runner?70:100,
-    speed: boss?1.42:brute?CFG.bruteSpeed:runner?CFG.runnerSpeed:CFG.zombieSpeed, walk:Math.random()*10, hitCD:0, recoil:0, baseScale:scale,
+    speed: boss?.71:brute?CFG.bruteSpeed:runner?CFG.runnerSpeed:CFG.zombieSpeed, walk:Math.random()*10, hitCD:0, recoil:0, baseScale:scale,
     stun:0, dead:false, flameCD: boss ? rand(2.4, 3.4) : 0, flameWarn:0, flameBurst:0, flameEmit:0, flameTick:0,
     flameDir: new THREE.Vector3(0,0,-1),
     emergeTime: gate ? (boss ? 2.15 : rand(.65, 1.25)) : 0,
