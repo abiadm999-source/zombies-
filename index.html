@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
 <title>Rift Stand: True 3D Prototype</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #050607; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #050607; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
   #game { width: 100vw; height: 100vh; display: block; }
   .hud { position: fixed; inset: 0; pointer-events: none; color: #f7efe2; text-shadow: 0 2px 4px #000; }
   .top {
@@ -53,7 +53,7 @@
   .panel { text-align: center; color: #f7efe2; }
   h1 { margin: 0 0 10px; color: #77f4ff; font-size: clamp(42px, 7vw, 86px); letter-spacing: 1px; }
   p { margin: 0 0 22px; color: #d9cbbb; }
-  button { border: 0; margin: 8px; padding: 14px 26px; font: 900 16px ui-monospace, monospace; color: #071015; background: #75f4ff; cursor: pointer; }
+  button { border: 0; margin: 8px; padding: 14px 26px; font: 900 16px ui-monospace, monospace; color: #071015; background: #75f4ff; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   button:nth-child(2) { background: #6ff072; }
   .hidden { display: none; }
 </style>
@@ -93,7 +93,7 @@
 </div>
 
 <script type="module">
-import * as THREE from "./assets/vendor/three.module.js";
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js";
 
 const CFG = {
   arenaW: 90, arenaH: 70, playerSpeed: 11, turnSpeed: 2.7,
@@ -200,9 +200,27 @@ document.addEventListener("keydown", e => {
   if (e.code === "KeyR" && phase !== "menu") start(mode);
 });
 document.addEventListener("keyup", e => keys[e.code] = false);
-document.getElementById("one").onclick = () => start(1);
-document.getElementById("two").onclick = () => start(2);
-document.getElementById("again").onclick = () => start(mode);
+document.addEventListener("touchmove", e => {
+  if (phase !== "menu") e.preventDefault();
+}, { passive: false });
+
+function bindStartButton(id, getMode) {
+  const button = document.getElementById(id);
+  let lastStart = 0;
+  const begin = e => {
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastStart < 350) return;
+    lastStart = now;
+    start(getMode());
+  };
+  button.addEventListener("pointerdown", begin, { passive: false });
+  button.addEventListener("touchstart", begin, { passive: false });
+  button.addEventListener("click", begin);
+}
+bindStartButton("one", () => 1);
+bindStartButton("two", () => 2);
+bindStartButton("again", () => mode);
 
 function mat(color, rough=0.72, metal=0.05) {
   return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
