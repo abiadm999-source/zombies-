@@ -381,6 +381,7 @@ function restoreOpaqueMaterial(material) {
     if (!m || m.userData.allowFade) return;
     m.transparent = false;
     m.opacity = 1;
+    m.depthTest = true;
     m.depthWrite = true;
     m.needsUpdate = true;
   });
@@ -394,62 +395,123 @@ function markModelAlwaysVisible(root) {
     if (o.material) restoreOpaqueMaterial(o.material);
   });
 }
-function zombieStableMaterial(color) {
+function zombieRawMaterial(color) {
   const material = new THREE.MeshBasicMaterial({
     color,
     side: THREE.DoubleSide,
     depthTest: true,
     depthWrite: true,
-    polygonOffset: true,
-    polygonOffsetFactor: -3,
-    polygonOffsetUnits: -3
+    fog: false
   });
-  material.userData.zombieStable = true;
+  material.toneMapped = true;
+  material.userData.zombieRaw = true;
   return material;
 }
-function makeZombieFallbackCore(type) {
-  const skinColor = type === "boss" ? 0x6f7b58 : 0x8c9a70;
-  const clothColor = type === "boss" ? 0x3b2921 : type === "runner" ? 0x5b284e : 0x5d463b;
-  const root = new THREE.Group();
-  root.name = "alwaysVisibleZombieShell";
-  root.userData.visualCore = true;
+function rawZombieMesh(geometry, material) {
+  const m = new THREE.Mesh(geometry, material);
+  m.castShadow = false;
+  m.receiveShadow = false;
+  m.frustumCulled = false;
+  m.userData.zombieRaw = true;
+  return m;
+}
+function rawZombieLimb(root, x, y, z, upperMat, handMat, radius, length, foot=false) {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.frustumCulled = false;
+  root.add(g);
+  const upper = rawZombieMesh(new THREE.CylinderGeometry(radius, radius * .92, length, 10), upperMat);
+  upper.position.y = -length * .28;
+  upper.rotation.z = .08 * Math.sign(x || 1);
+  const hand = rawZombieMesh(new THREE.SphereGeometry(radius * .92, 10, 8), handMat);
+  hand.position.y = -length * .86;
+  g.add(upper, hand);
+  if (foot) {
+    const boot = rawZombieMesh(new THREE.BoxGeometry(radius * 1.7, radius * .8, radius * 2.25), upperMat);
+    boot.position.set(0, -length * .98, -.12);
+    g.add(boot);
+  }
+  return g;
+}
+function makeRawZombieRig(root, type) {
+  const boss = type === "boss", runner = type === "runner", brute = type === "brute";
+  const skin = zombieRawMaterial(boss ? 0x8f986f : runner ? 0x969a72 : brute ? 0x828b6b : 0x8c9874);
+  const cloth = zombieRawMaterial(boss ? 0x5f4a3d : runner ? 0x6a3f4b : brute ? 0x5a4435 : 0x554a38);
+  const dark = zombieRawMaterial(0x1c1713);
+  const wound = zombieRawMaterial(0x5f2a24);
+  const eye = zombieRawMaterial(0xc9b867);
 
-  const cloth = zombieStableMaterial(clothColor);
-  const skin = zombieStableMaterial(skinColor);
-  const dark = zombieStableMaterial(0x17100d);
+  const parts = {};
+  parts.body = rawZombieMesh(new THREE.BoxGeometry(1.08, 2.05, .82), skin);
+  parts.body.position.y = 2.18;
+  root.add(parts.body);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.18, 1.9, .68), cloth);
-  body.position.y = 2.24;
-  body.rotation.x = -.08;
-  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(1.34, .26, .76), cloth);
-  shoulders.position.y = 3.0;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(.18, .22, .28, 12), skin);
-  neck.position.y = 3.13;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(.48, 16, 12), skin);
-  head.position.set(0, 3.36, -.12);
-  head.scale.set(1, 1.06, .92);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(.4, .16, .1), dark);
-  jaw.position.set(0, 3.15, -.46);
+  const shirtFront = rawZombieMesh(new THREE.BoxGeometry(.9, .92, .1), cloth);
+  shirtFront.position.set(0, 2.42, -.47);
+  root.add(shirtFront);
 
-  root.add(body, shoulders, neck, head, jaw);
-  root.userData.parts = { body, head };
-  root.traverse(o => {
-    o.frustumCulled = false;
-    if (o.isMesh) {
-      o.castShadow = false;
-      o.receiveShadow = false;
-      o.userData.visualCore = true;
-    }
-  });
-  return root;
+  const shirtBack = rawZombieMesh(new THREE.BoxGeometry(.9, .88, .1), cloth);
+  shirtBack.position.set(0, 2.38, .47);
+  root.add(shirtBack);
+
+  const waist = rawZombieMesh(new THREE.BoxGeometry(.96, .34, .78), cloth);
+  waist.position.y = 1.36;
+  root.add(waist);
+
+  const shoulders = rawZombieMesh(new THREE.BoxGeometry(1.62, .4, .96), skin);
+  shoulders.position.y = 3.02;
+  root.add(shoulders);
+
+  const chestWound = rawZombieMesh(new THREE.BoxGeometry(.36, .48, .095), wound);
+  chestWound.position.set(-.14, 2.45, -.5);
+  chestWound.rotation.z = .12;
+  root.add(chestWound);
+
+  const neck = rawZombieMesh(new THREE.CylinderGeometry(.18, .22, .28, 10), skin);
+  neck.position.y = 3.14;
+  root.add(neck);
+
+  parts.head = rawZombieMesh(new THREE.SphereGeometry(.54, 16, 12), skin);
+  parts.head.position.set(0, 3.42, -.12);
+  parts.head.scale.set(1, 1.06, .92);
+  root.add(parts.head);
+
+  const jaw = rawZombieMesh(new THREE.BoxGeometry(.4, .16, .1), dark);
+  jaw.position.set(0, 3.16, -.48);
+  root.add(jaw);
+
+  const eyeL = rawZombieMesh(new THREE.SphereGeometry(.06, 8, 6), eye);
+  const eyeR = rawZombieMesh(new THREE.SphereGeometry(.06, 8, 6), eye);
+  eyeL.position.set(-.15, 3.43, -.5);
+  eyeR.position.set(.15, 3.43, -.5);
+  root.add(eyeL, eyeR);
+
+  parts.lArm = rawZombieLimb(root, -.86, 2.62, -.02, skin, skin, .23, 1.32);
+  parts.rArm = rawZombieLimb(root, .86, 2.62, -.02, skin, skin, .23, 1.32);
+  parts.lLeg = rawZombieLimb(root, -.34, 1.1, 0, cloth, dark, .28, 1.32, true);
+  parts.rLeg = rawZombieLimb(root, .34, 1.1, 0, cloth, dark, .28, 1.32, true);
+
+  if (brute || boss) {
+    const armor = rawZombieMesh(new THREE.BoxGeometry(1.28, .24, .82), zombieRawMaterial(0x343839));
+    armor.position.y = 2.98;
+    root.add(armor);
+  }
+  if (boss) {
+    const tank = rawZombieMesh(new THREE.CylinderGeometry(.22, .22, .82, 12), zombieRawMaterial(0x343839));
+    tank.position.set(-.56, 2.35, .48);
+    tank.rotation.z = .24;
+    root.add(tank);
+    const nozzle = rawZombieMesh(new THREE.CylinderGeometry(.08, .08, .7, 10), zombieRawMaterial(0xb76335));
+    nozzle.position.set(.86, 2.16, -.72);
+    nozzle.rotation.x = Math.PI / 2;
+    root.add(nozzle);
+  }
+
+  return parts;
 }
 function ensureAliveVisible(z) {
   if (!z || z.userData.dead) return;
   const base = z.userData.baseScale || 1;
-  const closeToPlayer = players.some(p => {
-    if (!p || p.userData.down || p.userData.hp <= 0) return false;
-    return p.position.distanceTo(z.position) < 4.1;
-  });
   z.visible = true;
   if (z.scale.y < base * .35) z.scale.y = base;
   if (z.scale.z < base * .35) z.scale.z = base;
@@ -458,18 +520,6 @@ function ensureAliveVisible(z) {
     if (o.userData.effect) return;
     o.visible = true;
     if (o.material) restoreOpaqueMaterial(o.material);
-    if (o.userData.visualCore && o.material) {
-      o.renderOrder = closeToPlayer ? 900 : 1;
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach(m => {
-        if (!m) return;
-        m.depthTest = !closeToPlayer;
-        m.depthWrite = !closeToPlayer;
-        m.transparent = false;
-        m.opacity = 1;
-        m.needsUpdate = true;
-      });
-    }
   });
 }
 
@@ -854,21 +904,7 @@ function makeZombie(type, x, z, gate=null) {
     emergeDir: gate ? gate.dir.clone() : null, introTime:0, introMax:0,
     stuckTime:0, lastPos:new THREE.Vector3(x,0,z), detour:null, detourTime:0
   };
-  const skin = zombieStableMaterial(boss?0x6f7b58:0x8c9a70);
-  const cloth = zombieStableMaterial(boss?0x3b2921:runner?0x5b284e:0x5d463b);
-  const body = box(1.05,1.75,.55,0x6d594a); body.material=cloth; body.position.y=2.25; body.rotation.x = -.08; root.add(body);
-  const head = sphere(.43,0x8c9a70); head.material=skin; head.position.y=3.35; head.position.z = -.12; head.rotation.x = -.18; root.add(head);
-  const eyeMat = new THREE.MeshBasicMaterial({ color:0xffc84a });
-  const eyeL = sphere(.055,0xffc84a,8), eyeR=sphere(.055,0xffc84a,8);
-  eyeL.material = eyeMat; eyeR.material = eyeMat;
-  eyeL.position.set(-.15,3.42,-.38); eyeR.position.set(.15,3.42,-.38); root.add(eyeL,eyeR);
-  const parts = {};
-  parts.fallbackCore = makeZombieFallbackCore(type);
-  root.add(parts.fallbackCore);
-  parts.lArm = limb(root,-.78,2.55,0,skin,skin,.2,1.25); parts.rArm=limb(root,.78,2.55,0,skin,skin,.2,1.25);
-  parts.lLeg = limb(root,-.3,1.05,0,skin,cloth,.25,1.25); parts.rLeg=limb(root,.3,1.05,0,skin,cloth,.25,1.25);
-  parts.body = body; parts.head = head;
-  detailZombie(root, type, skin, cloth);
+  const parts = makeRawZombieRig(root, type);
   if (boss) {
     const warn = new THREE.Mesh(
       new THREE.BoxGeometry(2.6, .08, CFG.bossFlameRange),
@@ -893,61 +929,6 @@ function makeZombie(type, x, z, gate=null) {
   markModelAlwaysVisible(root);
   scene.add(root); return root;
 }
-function detailZombie(root, type, skin, cloth) {
-  const boss = type === "boss", runner = type === "runner", brute = type === "brute";
-  const wound = mat(0x6c1010, .95, 0);
-  const bone = mat(0xd8c9a5, .78, 0);
-  const dark = mat(0x14110f, .9, 0);
-  const metal = shiny(0x3d4146, .42, .48);
-
-  // Face, jaw, teeth, and torn mouth silhouette.
-  addObj(root, box(.34, .16, .08, 0x130806), 0, 3.16, -.42).material = dark;
-  for (let i=0;i<5;i++) addObj(root, box(.035, .11, .035, 0xd8c9a5), -.15 + i*.075, 3.22, -.48).material = bone;
-  addObj(root, cone(.08, .22, 0x8c9a70, 10), 0, 3.34, -.44, Math.PI/2, 0, 0).material = skin;
-  addObj(root, box(.42, .055, .055, 0x2a1010), 0, 3.02, -.37, 0, 0, -.18).material = wound;
-
-  // Exposed ribs/wounds and torn shirt strips.
-  addObj(root, box(.46, .52, .065, 0x6c1010), -.14, 2.45, -.31, 0, 0, .12).material = wound;
-  addObj(root, box(.38, .58, .07, 0x4c0d0d), .18, 2.35, .32, 0, 0, -.2).material = wound;
-  for (let i=0;i<4;i++) addObj(root, box(.42, .035, .055, 0xd8c9a5), -.02, 2.65 - i*.13, -.36, 0, 0, -.12).material = bone;
-  for (let i=0;i<3;i++) addObj(root, box(.32, .032, .052, 0xd8c9a5), .13, 2.55 - i*.14, .37, 0, 0, .12).material = bone;
-  addObj(root, box(.22, .8, .06, cloth.color?.getHex?.() || 0x5d463b), -.45, 2.1, -.33, 0, 0, .28).material = cloth;
-  addObj(root, box(.18, .7, .06, cloth.color?.getHex?.() || 0x5d463b), .42, 2.12, -.34, 0, 0, -.24).material = cloth;
-  addObj(root, box(.2, .85, .06, cloth.color?.getHex?.() || 0x5d463b), -.38, 2.03, .34, 0, 0, -.34).material = cloth;
-  addObj(root, box(.2, .8, .06, cloth.color?.getHex?.() || 0x5d463b), .39, 2.1, .34, 0, 0, .3).material = cloth;
-
-  // Long hands/claws.
-  [-1,1].forEach(side => {
-    for (let i=0;i<3;i++) {
-      const claw = cone(.028, .28, 0xc9bea6, 8);
-      claw.material = bone;
-      addObj(root, claw, side*.98 + i*.035*side, 1.45 - i*.018, -.08, Math.PI*.52, 0, side*.2);
-    }
-  });
-
-  if (runner) {
-    root.scale.x *= .82;
-    addObj(root, box(.18, .82, .08, 0x5b284e), -.52, 2.4, -.36, 0, 0, .36).material = cloth;
-  }
-  if (brute || boss) {
-    addObj(root, box(1.25, .24, .72, 0x2c2d2f), 0, 2.95, 0).material = metal;
-    addObj(root, box(.32, .3, .82, 0x3d4146), -.78, 2.85, 0).material = metal;
-    addObj(root, box(.32, .3, .82, 0x3d4146), .78, 2.85, 0).material = metal;
-  }
-  if (boss) {
-    addObj(root, torus(.78, .04, 0x333333, 28, 8), 0, 2.65, -.18, Math.PI/2, 0, .25).material = metal;
-    addObj(root, sphere(.18, 0x70ff66, 12), .56, 1.35, -.45).material = glowMat(0x70ff66, 1.4);
-    addObj(root, cyl(.16, 1.05, 0x303438, 16), .88, 2.1, -.55, Math.PI/2, 0, 0).material = metal;
-    addObj(root, cyl(.08, .55, 0xff6f24, 14), .88, 2.1, -1.25, Math.PI/2, 0, 0).material = glowMat(0xff6f24, .8);
-    addObj(root, cyl(.22, .75, 0x3d4146, 16), -.55, 2.25, .46, 0, 0, .25).material = metal;
-    for (let i=0;i<6;i++) {
-      const spike = cone(.08, .34, 0x3d4146, 8);
-      spike.material = metal;
-      addObj(root, spike, -.5 + i*.2, 3.2 + Math.sin(i)*.08, .18, Math.PI, 0, 0);
-    }
-  }
-}
-
 function start() {
   cleanupDynamic();
   mode = 1; wave = 0; score = 0; phase = "play"; betweenWaves = false; waveTimer = 0; screenShake = 0; survivalStart = last || 0; survivalSeconds = 0; setPhase("play");
@@ -1052,7 +1033,7 @@ function updateSpawnQueue(dt) {
 function gateSpawnPoint(gate, slot=0, boss=false) {
   const side = new THREE.Vector3(gate.dir.z, 0, -gate.dir.x).normalize();
   const p = new THREE.Vector3(gate.x, 0, gate.z)
-    .addScaledVector(gate.dir, boss ? .45 : .85 + (slot % 4) * .18)
+    .addScaledVector(gate.dir, boss ? 1.8 : 2.35 + (slot % 4) * .2)
     .addScaledVector(side, rand(boss ? -.45 : -1.55, boss ? .45 : 1.55));
   for (let i=0; i<8 && circleHitsWall(p.x, p.z, boss ? 1.7 : 1.35); i++) p.addScaledVector(gate.dir, .75);
   p.x = THREE.MathUtils.clamp(p.x, -40, 40);
@@ -1312,12 +1293,6 @@ function animateZombie(root, walk, moving, recoil=0, stunned=false) {
     p.head.rotation.x = -.24 + Math.sin(walk * 1.7) * .08 * moving;
     p.head.rotation.z = Math.sin(walk * 1.1) * .1 * moving;
   }
-  const shell = p.fallbackCore?.userData?.parts;
-  if (shell?.body) shell.body.rotation.x = -.18 - recoil * .08;
-  if (shell?.head) {
-    shell.head.rotation.x = -.24 + Math.sin(walk * 1.7) * .08 * moving;
-    shell.head.rotation.z = Math.sin(walk * 1.1) * .1 * moving;
-  }
   if (stunned) {
     p.lArm.rotation.z += .35;
     p.rArm.rotation.z -= .35;
@@ -1437,7 +1412,8 @@ function updateZombies(dt, now) {
     updateBossFlame(z, target, dt, now, d);
     const warning = u.type === "boss" && u.flameWarn > 0;
     const moveScale = u.stun > 0 ? .08 : warning ? .22 : 1;
-    if (d > (u.type === "boss" ? 3.0 : 2.25)) {
+    const stopRange = u.type === "boss" ? 3.0 : u.type === "brute" ? 2.45 : 2.25;
+    if (d > stopRange) {
       const step = u.speed * dt * moveScale;
       const moved = moveWithCollisions(z, dir.x * step, dir.z * step, radius);
       if (!moved.movedX && !moved.movedZ && u.stun <= 0) {
@@ -1474,8 +1450,8 @@ function updateZombies(dt, now) {
     updateBossIntro(z, dt, now);
     ensureAliveVisible(z);
     updateBossHealthBar(z);
-    const touchRange = u.type === "boss" ? 3.25 : u.type === "brute" ? 2.35 : 2.15;
-    const contactDistance = target.position.distanceTo(z.position);
+    const touchRange = u.type === "boss" ? 3.55 : u.type === "brute" ? 2.85 : 2.65;
+    const contactDistance = Math.hypot(target.position.x - z.position.x, target.position.z - z.position.z);
     if (contactDistance < touchRange) hurtPlayer(target, u.type==="boss" ? 24 : 12, now, z.position, u.type==="boss");
     const progress = beforeMove.distanceTo(z.position);
     if (d > 4 && progress < .035 && u.stun <= 0) {
