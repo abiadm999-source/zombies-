@@ -394,6 +394,18 @@ function markModelAlwaysVisible(root) {
     if (o.material) restoreOpaqueMaterial(o.material);
   });
 }
+function makeZombieFallbackCore(type) {
+  const color = type === "boss" ? 0x3b2921 : type === "runner" ? 0x5b284e : 0x51603f;
+  const material = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: true, depthWrite: true });
+  const core = new THREE.Mesh(new THREE.CapsuleGeometry(.32, 2.22, 5, 10), material);
+  core.name = "alwaysVisibleZombieCore";
+  core.position.y = 1.86;
+  core.castShadow = false;
+  core.receiveShadow = false;
+  core.frustumCulled = false;
+  core.userData.visualCore = true;
+  return core;
+}
 function ensureAliveVisible(z) {
   if (!z || z.userData.dead) return;
   const base = z.userData.baseScale || 1;
@@ -793,9 +805,13 @@ function makeZombie(type, x, z, gate=null) {
   const cloth = mat(boss?0x3b2921:runner?0x5b284e:0x5d463b, .92, 0);
   const body = box(1.05,1.75,.55,0x6d594a); body.material=cloth; body.position.y=2.25; body.rotation.x = -.08; root.add(body);
   const head = sphere(.43,0x8c9a70); head.material=skin; head.position.y=3.35; head.position.z = -.12; head.rotation.x = -.18; root.add(head);
-  const eyeL = sphere(.055,0xffc84a,8), eyeR=sphere(.055,0xffc84a,8); eyeL.position.set(-.15,3.42,-.38); eyeR.position.set(.15,3.42,-.38); root.add(eyeL,eyeR);
-  const pLight = new THREE.PointLight(0xffaa33, .45, 3); pLight.position.set(0,3.35,-.45); root.add(pLight);
+  const eyeMat = new THREE.MeshBasicMaterial({ color:0xffc84a });
+  const eyeL = sphere(.055,0xffc84a,8), eyeR=sphere(.055,0xffc84a,8);
+  eyeL.material = eyeMat; eyeR.material = eyeMat;
+  eyeL.position.set(-.15,3.42,-.38); eyeR.position.set(.15,3.42,-.38); root.add(eyeL,eyeR);
   const parts = {};
+  parts.fallbackCore = makeZombieFallbackCore(type);
+  root.add(parts.fallbackCore);
   parts.lArm = limb(root,-.78,2.55,0,skin,skin,.2,1.25); parts.rArm=limb(root,.78,2.55,0,skin,skin,.2,1.25);
   parts.lLeg = limb(root,-.3,1.05,0,skin,cloth,.25,1.25); parts.rLeg=limb(root,.3,1.05,0,skin,cloth,.25,1.25);
   parts.body = body; parts.head = head;
