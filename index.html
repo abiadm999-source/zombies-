@@ -193,6 +193,7 @@ let phase = "menu", mode = 1, wave = 0, score = 0, last = 0, startLocked = false
 let players = [], zombies = [], bullets = [], impacts = [], stunBursts = [], powerups = [], corpses = [], flames = [], walls = [], wallBounds = [], spawnQueue = [];
 let nextPowerup = 10, betweenWaves = false, waveTimer = 0, centerMsgTimer = 0, screenShake = 0;
 let currentMapIndex = 0, currentZone = 1, fadeTimer = 0, fadeMax = 1, breakMain = "", breakSub = "", breakTone = "clear";
+let nextZombieId = 1;
 const centerMsg = document.getElementById("centerMsg");
 const centerMain = centerMsg.querySelector(".main");
 const centerSub = centerMsg.querySelector(".sub");
@@ -396,12 +397,14 @@ function markModelAlwaysVisible(root) {
   });
 }
 function zombieRawMaterial(color) {
-  const material = new THREE.MeshBasicMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color,
+    roughness: .92,
+    metalness: 0,
     side: THREE.DoubleSide,
     depthTest: true,
     depthWrite: true,
-    fog: false
+    fog: true
   });
   material.toneMapped = true;
   material.userData.zombieRaw = true;
@@ -415,10 +418,28 @@ function rawZombieMesh(geometry, material) {
   m.userData.zombieRaw = true;
   return m;
 }
+function rememberZombieVisualDefaults(root) {
+  root.traverse(o => {
+    if (!o.userData.zombieRaw && !o.userData.zombieVisualRoot) return;
+    o.userData.zombieDefault = {
+      position: o.position.clone(),
+      rotation: o.rotation.clone(),
+      scale: o.scale.clone()
+    };
+  });
+}
+function restoreZombieObjectTransform(o) {
+  const d = o.userData.zombieDefault;
+  if (!d) return;
+  o.position.copy(d.position);
+  o.rotation.copy(d.rotation);
+  o.scale.copy(d.scale);
+}
 function rawZombieLimb(root, x, y, z, upperMat, handMat, radius, length, foot=false) {
   const g = new THREE.Group();
   g.position.set(x, y, z);
   g.frustumCulled = false;
+  g.userData.zombieRaw = true;
   root.add(g);
   const upper = rawZombieMesh(new THREE.CylinderGeometry(radius, radius * .92, length, 10), upperMat);
   upper.position.y = -length * .28;
@@ -435,11 +456,11 @@ function rawZombieLimb(root, x, y, z, upperMat, handMat, radius, length, foot=fa
 }
 function makeRawZombieRig(root, type) {
   const boss = type === "boss", runner = type === "runner", brute = type === "brute";
-  const skin = zombieRawMaterial(boss ? 0x8f986f : runner ? 0x969a72 : brute ? 0x828b6b : 0x8c9874);
-  const cloth = zombieRawMaterial(boss ? 0x5f4a3d : runner ? 0x6a3f4b : brute ? 0x5a4435 : 0x554a38);
-  const dark = zombieRawMaterial(0x1c1713);
-  const wound = zombieRawMaterial(0x5f2a24);
-  const eye = zombieRawMaterial(0xc9b867);
+  const skin = zombieRawMaterial(boss ? 0x697252 : runner ? 0x72765a : brute ? 0x5f684f : 0x687256);
+  const cloth = zombieRawMaterial(boss ? 0x453b32 : runner ? 0x4f3540 : brute ? 0x40362c : 0x3c392e);
+  const dark = zombieRawMaterial(0x14130f);
+  const wound = zombieRawMaterial(0x43211d);
+  const eye = zombieRawMaterial(0x87784e);
 
   const parts = {};
   parts.body = rawZombieMesh(new THREE.BoxGeometry(1.08, 2.05, .82), skin);
@@ -521,6 +542,117 @@ function ensureAliveVisible(z) {
     o.visible = true;
     if (o.material) restoreOpaqueMaterial(o.material);
   });
+}
+function finiteNumber(value) {
+  return Number.isFinite(value);
+}
+function finiteVector3(v) {
+  return !!v && finiteNumber(v.x) && finiteNumber(v.y) && finiteNumber(v.z);
+}
+function finiteEuler(e) {
+  return !!e && finiteNumber(e.x) && finiteNumber(e.y) && finiteNumber(e.z);
+}
+function finitePositiveScale(s) {
+  return finiteVector3(s) && s.x > .01 && s.y > .01 && s.z > .01 && s.x < 8 && s.y < 8 && s.z < 8;
+}
+function logZombieVisualIssue(z, issues, stage, now) {
+  const u = z.userData || {};
+  if (u.lastVisualDebugAt && now - u.lastVisualDebugAt < 2) return;
+  u.lastVisualDebugAt = now;
+  console.warn("Zombie visual state repaired", {
+    id: u.id, wave, stage, issues,
+    type: u.type,
+    position: { x:z.position.x, y:z.position.y, z:z.position.z },
+    velocity: u.velocity ? { x:u.velocity.x, y:u.velocity.y, z:u.velocity.z } : null,
+    rotation: { x:z.rotation.x, y:z.rotation.y, z:z.rotation.z },
+    scale: { x:z.scale.x, y:z.scale.y, z:z.scale.z },
+    walk: u.walk, recoil: u.recoil, stun: u.stun,
+    emergeTime: u.emergeTime, introTime: u.introTime,
+    dead: !!u.dead
+  });
+}
+function validateZombieVisualState(z, stage="update", now=last || 0) {
+  if (!z || z.userData?.dead) return;
+  const u = z.userData;
+  const issues = [];
+  const base = finiteNumber(u.baseScale) && u.baseScale > 0 ? u.baseScale : 1;
+  if (!finiteVector3(z.position)) {
+    issues.push("root position invalid");
+    const lastPos = finiteVector3(u.lastPos) ? u.lastPos : new THREE.Vector3(0,0,0);
+    z.position.set(lastPos.x, 0, lastPos.z);
+  }
+  z.position.x = THREE.MathUtils.clamp(z.position.x, -42, 42);
+  z.position.y = 0;
+  z.position.z = THREE.MathUtils.clamp(z.position.z, -32, 32);
+
+  if (!finiteEuler(z.rotation)) {
+    issues.push("root rotation invalid");
+    z.rotation.set(0, finiteNumber(u.facing) ? u.facing : 0, 0);
+  } else {
+    if (Math.abs(z.rotation.x) > .001 || Math.abs(z.rotation.z) > .001) issues.push("root visual tilt leaked");
+    z.rotation.x = 0;
+    z.rotation.z = 0;
+    if (!finiteNumber(z.rotation.y)) z.rotation.y = finiteNumber(u.facing) ? u.facing : 0;
+  }
+
+  if (!finitePositiveScale(z.scale)) {
+    issues.push("root scale invalid");
+    z.scale.setScalar(base);
+  } else if (Math.abs(z.scale.x - base) > .001 || Math.abs(z.scale.y - base) > .001 || Math.abs(z.scale.z - base) > .001) {
+    issues.push("root scale drift");
+    z.scale.setScalar(base);
+  }
+
+  if (!finiteNumber(u.walk)) { issues.push("walk invalid"); u.walk = 0; }
+  if (!finiteNumber(u.recoil)) { issues.push("recoil invalid"); u.recoil = 0; }
+  if (!finiteNumber(u.stun)) { issues.push("stun invalid"); u.stun = 0; }
+  if (!finiteNumber(u.emergeTime)) { issues.push("emerge invalid"); u.emergeTime = 0; }
+  if (!finiteNumber(u.detourTime)) { issues.push("detour invalid"); u.detourTime = 0; }
+  u.recoil = THREE.MathUtils.clamp(u.recoil, 0, 1.35);
+  u.stun = Math.max(0, u.stun);
+
+  const parts = u.parts || {};
+  const visual = parts.visualRoot;
+  if (visual) {
+    visual.visible = true;
+    if (!finiteVector3(visual.position) || !finiteEuler(visual.rotation) || !finitePositiveScale(visual.scale)) {
+      issues.push("visual root invalid");
+      restoreZombieObjectTransform(visual);
+    }
+  }
+
+  let bodyVisible = false;
+  z.traverse(o => {
+    o.frustumCulled = false;
+    if (o.userData.effect) return;
+    if (o.userData.zombieRaw || o.userData.zombieVisualRoot) {
+      if (!finiteVector3(o.position) || !finiteEuler(o.rotation) || !finitePositiveScale(o.scale)) {
+        issues.push("part transform invalid");
+        restoreZombieObjectTransform(o);
+      } else if (o.userData.zombieRaw && (Math.abs(o.rotation.x) > 2.9 || Math.abs(o.rotation.y) > 2.9 || Math.abs(o.rotation.z) > 2.9)) {
+        issues.push("part rotation out of range");
+        restoreZombieObjectTransform(o);
+      }
+      o.visible = true;
+    }
+    if (o.material && (o.userData.zombieRaw || o.userData.zombieVisualRoot)) {
+      restoreOpaqueMaterial(o.material);
+    }
+  });
+  if (parts.body) {
+    bodyVisible = parts.body.visible !== false && (!parts.body.material || parts.body.material.opacity !== 0);
+    if (!bodyVisible) {
+      issues.push("body hidden");
+      parts.body.visible = true;
+      if (parts.body.material) restoreOpaqueMaterial(parts.body.material);
+    }
+  }
+  if (!bodyVisible) issues.push("body missing");
+  if (u.velocity && !finiteVector3(u.velocity)) {
+    issues.push("velocity invalid");
+    u.velocity.set(0,0,0);
+  }
+  if (issues.length) logZombieVisualIssue(z, issues, stage, now);
 }
 
 function buildWorld() {
@@ -892,19 +1024,24 @@ function setPlayerWeapon(player, type, now) {
 
 function makeZombie(type, x, z, gate=null) {
   const root = new THREE.Group(); root.position.set(x,0,z);
+  const visualRoot = new THREE.Group();
+  visualRoot.userData.zombieVisualRoot = true;
+  root.add(visualRoot);
   const boss = type === "boss", runner = type === "runner", brute = type === "brute";
   const scale = boss ? 1.95 : brute ? 1.25 : runner ? .88 : 1;
   root.scale.setScalar(scale);
   root.userData = {
+    id: nextZombieId++,
     type, hp: boss?900:brute?230:runner?70:100, max: boss?900:brute?230:runner?70:100,
     speed: boss?.71:brute?CFG.bruteSpeed:runner?CFG.runnerSpeed:CFG.zombieSpeed, walk:Math.random()*10, hitCD:0, recoil:0, baseScale:scale,
     stun:0, dead:false, flameCD: boss ? rand(2.4, 3.4) : 0, flameWarn:0, flameBurst:0, flameEmit:0, flameTick:0,
     flameDir: new THREE.Vector3(0,0,-1),
     emergeTime: gate ? (boss ? 2.15 : rand(.65, 1.25)) : 0,
     emergeDir: gate ? gate.dir.clone() : null, introTime:0, introMax:0,
-    stuckTime:0, lastPos:new THREE.Vector3(x,0,z), detour:null, detourTime:0
+    stuckTime:0, lastPos:new THREE.Vector3(x,0,z), velocity:new THREE.Vector3(), facing:0, detour:null, detourTime:0
   };
-  const parts = makeRawZombieRig(root, type);
+  const parts = makeRawZombieRig(visualRoot, type);
+  parts.visualRoot = visualRoot;
   if (boss) {
     const warn = new THREE.Mesh(
       new THREE.BoxGeometry(2.6, .08, CFG.bossFlameRange),
@@ -921,13 +1058,16 @@ function makeZombie(type, x, z, gate=null) {
     hpFill.material = new THREE.MeshBasicMaterial({ color:0xff4b36 });
     hpFill.position.z = -.03;
     hpRoot.add(hpTrack, hpFill);
-    root.add(hpRoot);
+    visualRoot.add(hpRoot);
     parts.hpRoot = hpRoot;
     parts.hpFill = hpFill;
   }
   root.userData.parts = parts;
+  rememberZombieVisualDefaults(visualRoot);
   markModelAlwaysVisible(root);
-  scene.add(root); return root;
+  validateZombieVisualState(root, "spawn", last || 0);
+  scene.add(root);
+  return root;
 }
 function start() {
   cleanupDynamic();
@@ -1142,6 +1282,7 @@ function wallClearanceScore(p) {
   return Math.min(score, 12) * .08;
 }
 function moveWithCollisions(obj, dx, dz, radius) {
+  if (!obj || !finiteVector3(obj.position) || !finiteNumber(dx) || !finiteNumber(dz) || !finiteNumber(radius) || radius <= 0) return {movedX:false, movedZ:false};
   const ox = obj.position.x;
   const oz = obj.position.z;
   let nx = THREE.MathUtils.clamp(ox + dx, -42, 42);
@@ -1154,6 +1295,7 @@ function moveWithCollisions(obj, dx, dz, radius) {
   return {movedX, movedZ};
 }
 function resolveWallOverlap(obj, radius) {
+  if (!obj || !finiteVector3(obj.position) || !finiteNumber(radius) || radius <= 0) return;
   for (const w of wallBounds) {
     const left = w.x - w.w / 2, right = w.x + w.w / 2, top = w.z - w.d / 2, bottom = w.z + w.d / 2;
     const nx = THREE.MathUtils.clamp(obj.position.x, left, right);
@@ -1272,8 +1414,9 @@ function updatePlayers(dt, now) {
 }
 function animateHumanoid(root, walk, moving, recoil=0) {
   const p = root.userData.parts, s = Math.sin(walk*2.2)*moving, c = Math.cos(walk*2.2)*moving;
-  root.position.y = Math.abs(s)*.08;
-  root.rotation.z = s*.035 - recoil*.04;
+  const visual = p?.visualRoot || root;
+  visual.position.y = Math.abs(s)*.08;
+  visual.rotation.z = s*.035 - recoil*.04;
   if (!p) return;
   p.lLeg.rotation.x = s*.65; p.rLeg.rotation.x = -s*.65;
   p.lArm.rotation.x = -s*.45; p.rArm.rotation.x = s*.25 - recoil*.45;
@@ -1379,14 +1522,18 @@ function updateZombies(dt, now) {
   zombies.forEach(z => {
     const u = z.userData;
     if (u.dead) return;
+    validateZombieVisualState(z, "pre-update", now);
     ensureAliveVisible(z);
     u.recoil = Math.max(0,u.recoil-dt*4);
     u.stun = Math.max(0,u.stun-dt);
     u.detourTime = Math.max(0, (u.detourTime || 0) - dt);
     const radius = u.type === "boss" ? 1.45 : u.type === "brute" ? 1.0 : .78;
+    const frameStart = z.position.clone();
     if (u.emergeTime > 0 && u.emergeDir) {
       u.emergeTime -= dt;
-      const out = u.emergeDir.clone().normalize();
+      const out = finiteVector3(u.emergeDir) && u.emergeDir.lengthSq() > .001 ? u.emergeDir.clone().normalize() : forward(z);
+      out.y = 0;
+      if (out.lengthSq() < .001) out.set(0,0,-1);
       faceDirection(z, out);
       const step = Math.max(u.speed, u.type === "boss" ? 3.6 : 3.1) * dt;
       moveWithCollisions(z, out.x * step, out.z * step, radius);
@@ -1395,6 +1542,9 @@ function updateZombies(dt, now) {
       animateZombie(z, u.walk, .9, u.recoil, false);
       updateBossIntro(z, dt, now);
       updateBossHealthBar(z);
+      u.velocity.set((z.position.x - frameStart.x) / Math.max(dt, .001), 0, (z.position.z - frameStart.z) / Math.max(dt, .001));
+      u.lastPos.copy(z.position);
+      validateZombieVisualState(z, "emerge", now);
       if (u.type === "boss" && u.emergeTime <= 0) {
         u.flameCD = Math.max(u.flameCD, 2.1);
         showCenterMessage("BOSS ENTERED", "Keep moving before the flame warning.", "boss", 1.1);
@@ -1407,7 +1557,7 @@ function updateZombies(dt, now) {
     const dir = steerTo.clone().sub(z.position); dir.y=0;
     const d = target.position.distanceTo(z.position);
     if (dir.lengthSq() > .001) dir.normalize();
-    if (target.position.distanceToSquared(z.position) > .001) z.lookAt(target.position.x, z.position.y, target.position.z);
+    if (target.position.distanceToSquared(z.position) > .001) faceDirection(z, aimFlat(z.position, target.position));
 
     updateBossFlame(z, target, dt, now, d);
     const warning = u.type === "boss" && u.flameWarn > 0;
@@ -1471,16 +1621,26 @@ function updateZombies(dt, now) {
     } else {
       u.stuckTime = 0;
     }
+    u.velocity.set((z.position.x - frameStart.x) / Math.max(dt, .001), 0, (z.position.z - frameStart.z) / Math.max(dt, .001));
+    u.lastPos.copy(z.position);
+    validateZombieVisualState(z, "post-update", now);
   });
 }
 function aimFlat(from, to) {
+  if (!finiteVector3(from) || !finiteVector3(to)) return new THREE.Vector3(0,0,-1);
   const dir = to.clone().sub(from);
   dir.y = 0;
   if (dir.lengthSq() < .001) return new THREE.Vector3(0,0,-1);
   return dir.normalize();
 }
 function faceDirection(obj, dir) {
-  obj.rotation.y = Math.atan2(-dir.x, -dir.z);
+  if (!obj || !finiteNumber(dir?.x) || !finiteNumber(dir?.z) || (Math.abs(dir.x) < .0001 && Math.abs(dir.z) < .0001)) return;
+  const facing = Math.atan2(-dir.x, -dir.z);
+  if (!finiteNumber(facing)) return;
+  obj.rotation.x = 0;
+  obj.rotation.y = facing;
+  obj.rotation.z = 0;
+  if (obj.userData) obj.userData.facing = facing;
 }
 function updateBossHealthBar(z) {
   const fill = z.userData.parts?.hpFill;
