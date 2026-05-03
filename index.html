@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Rift Stand: iPhone Survival Prototype</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
-    margin: 0; width: 100%; height: 100%; overflow: hidden; background: #050607;
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #050607;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace; touch-action: none;
     overscroll-behavior: none; -webkit-user-select: none; user-select: none;
     -webkit-touch-callout: none;
   }
   body { position: fixed; inset: 0; }
   #game { width: 100vw; height: 100vh; height: 100svh; display: block; touch-action: none; }
-  .hud { position: fixed; inset: 0; pointer-events: none; color: #f7efe2; text-shadow: 0 2px 4px #000; }
+  .hud { position: fixed; inset: 0; pointer-events: none; color: #f7efe2; text-shadow: 0 2px 4px #000; touch-action: none; }
   .top {
     position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px;
     display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px;
@@ -25,7 +25,7 @@
   .top > div:last-child { text-align: right; }
   .healthPanel {
     position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + 42px); left: 12px; right: 12px;
-    display: grid; gap: 8px; max-width: 460px; margin: 0 auto;
+    display: grid; gap: 8px; max-width: 460px; margin: 0 auto; touch-action: none;
   }
   .playerBar { background: rgba(0,0,0,.58); border: 1px solid rgba(255,255,255,.22); padding: 8px; border-radius: 8px; }
   .barLabel { display: flex; justify-content: space-between; font-size: 12px; font-weight: 900; margin-bottom: 5px; }
@@ -80,19 +80,19 @@
   .menu, .over, .pause {
     position: absolute; inset: 0; display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
     background: radial-gradient(circle at 50% 35%, rgba(19,37,38,.42), rgba(0,0,0,.82));
-    pointer-events: auto; z-index: 8;
+    pointer-events: auto; z-index: 8; touch-action: none;
   }
-  .panel { text-align: center; color: #f7efe2; width: min(440px, 100%); }
+  .panel { text-align: center; color: #f7efe2; width: min(440px, 100%); touch-action: none; }
   h1 { margin: 0 0 10px; color: #77f4ff; font-size: clamp(44px, 14vw, 70px); line-height: .9; letter-spacing: 1px; }
   p { margin: 0 0 18px; color: #d9cbbb; font-size: 14px; line-height: 1.45; }
   .controlCopy { display: grid; gap: 8px; margin: 20px auto 22px; color: #f7efe2; font-weight: 800; font-size: 14px; }
   button {
     border: 0; min-height: 54px; margin: 8px; padding: 15px 26px; border-radius: 999px;
     font: 900 16px ui-monospace, monospace; color: #071015; background: #75f4ff;
-    cursor: pointer; touch-action: manipulation;
+    cursor: pointer; touch-action: none;
   }
   .secondaryButton { background: #f4e7c6; }
-  .touchControls { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .touchControls { position: absolute; inset: 0; pointer-events: none; z-index: 5; touch-action: none; }
   .joystick {
     position: absolute; left: max(22px, env(safe-area-inset-left)); bottom: calc(max(24px, env(safe-area-inset-bottom)) + 14px);
     width: 136px; height: 136px; border-radius: 50%; border: 2px solid rgba(120,244,255,.46);
@@ -103,6 +103,7 @@
     position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; border-radius: 50%;
     transform: translate(-50%, -50%); background: rgba(120,244,255,.76);
     border: 2px solid rgba(255,255,255,.7); box-shadow: 0 8px 18px rgba(0,0,0,.5);
+    touch-action: none;
   }
   .fireButton {
     position: absolute; right: max(22px, env(safe-area-inset-right)); bottom: calc(max(26px, env(safe-area-inset-bottom)) + 18px);
@@ -115,6 +116,7 @@
   .rotateNotice {
     position: absolute; inset: 0; display: none; place-items: center; padding: 28px; text-align: center;
     background: rgba(0,0,0,.86); color: #f7efe2; font-weight: 900; z-index: 12; pointer-events: none;
+    touch-action: none;
   }
   @media (orientation: landscape) and (max-height: 520px) {
     .rotateNotice { display: grid; }
@@ -274,6 +276,11 @@ const MAP_LAYOUTS = [
 
 function rand(a, b) { return a + Math.random() * (b - a); }
 
+let lastTouchEndTime = 0;
+function preventMobileBrowserGesture(e) {
+  if (e.cancelable) e.preventDefault();
+}
+
 document.addEventListener("keydown", e => {
   keys[e.code] = true;
   if (["Space","Enter","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
@@ -282,9 +289,16 @@ document.addEventListener("keydown", e => {
   if (e.code === "KeyR" && phase !== "menu") start();
 });
 document.addEventListener("keyup", e => keys[e.code] = false);
-document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-document.addEventListener("gesturestart", e => e.preventDefault());
-document.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("touchmove", preventMobileBrowserGesture, { passive: false, capture: true });
+document.addEventListener("touchend", e => {
+  const now = performance.now();
+  if (now - lastTouchEndTime < 300) preventMobileBrowserGesture(e);
+  lastTouchEndTime = now;
+}, { passive: false, capture: true });
+["gesturestart", "gesturechange", "gestureend"].forEach(type => {
+  document.addEventListener(type, preventMobileBrowserGesture, { passive: false, capture: true });
+});
+document.addEventListener("contextmenu", preventMobileBrowserGesture);
 
 function bindPressButton(id, action) {
   const button = document.getElementById(id);
