@@ -49,6 +49,30 @@
   .centerMsg.shield .main { color: #78f4ff; }
   .centerMsg.crossbow .main { color: #ffd36b; }
   .centerMsg.sword .main { color: #cfffff; }
+  .killstreak {
+    position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + 122px); left: 50%;
+    transform: translate(-50%, 0) scale(1); padding: 5px 12px; border-radius: 999px;
+    background: rgba(4, 11, 13, .68); border: 1px solid rgba(120,244,255,.34);
+    color: #f7efe2; font-size: clamp(13px, 4vw, 18px); font-weight: 950; letter-spacing: .6px;
+    text-align: center; white-space: nowrap; z-index: 6; opacity: .94; pointer-events: none;
+    transition: opacity .16s ease, transform .16s ease; box-shadow: 0 6px 16px rgba(0,0,0,.42);
+  }
+  .killstreak.hidden { opacity: 0; transform: translate(-50%, -6px) scale(.92); }
+  .killstreak.pulse { animation: streakPulse .34s ease-out; }
+  @keyframes streakPulse {
+    0% { transform: translate(-50%, 0) scale(.92); color: #78f4ff; }
+    58% { transform: translate(-50%, 0) scale(1.12); color: #fff1a8; }
+    100% { transform: translate(-50%, 0) scale(1); color: #f7efe2; }
+  }
+  .enemyBars { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  .enemyHp {
+    position: absolute; width: 32px; height: 5px; margin-left: -16px; margin-top: -3px;
+    border-radius: 999px; border: 1px solid rgba(0,0,0,.78); overflow: hidden;
+    background: rgba(18, 5, 5, .66); box-shadow: 0 1px 4px rgba(0,0,0,.7);
+    transform: translate3d(-9999px, -9999px, 0); opacity: .86;
+  }
+  .enemyHp.boss { width: 54px; height: 7px; margin-left: -27px; margin-top: -4px; opacity: .95; }
+  .enemyHpFill { height: 100%; width: 100%; border-radius: inherit; background: #70ef68; transform-origin: left center; }
   .fadeOverlay {
     position: absolute; inset: 0; background: #050607; opacity: 0;
     pointer-events: none; transition: opacity .08s linear;
@@ -108,6 +132,8 @@
   </div>
   <div id="fadeOverlay" class="fadeOverlay"></div>
   <div id="centerMsg" class="centerMsg hidden"><div class="main"></div><div class="sub"></div></div>
+  <div id="killstreak" class="killstreak hidden"></div>
+  <div id="enemyBars" class="enemyBars"></div>
   <div class="healthPanel">
     <div id="p1Bar" class="playerBar">
       <div class="barLabel"><span>HP</span><span id="p1Hp">100</span></div>
@@ -197,11 +223,15 @@ let nextZombieId = 1;
 const centerMsg = document.getElementById("centerMsg");
 const centerMain = centerMsg.querySelector(".main");
 const centerSub = centerMsg.querySelector(".sub");
+const killstreakEl = document.getElementById("killstreak");
+const enemyBars = document.getElementById("enemyBars");
 const fadeOverlay = document.getElementById("fadeOverlay");
 const touchControls = document.getElementById("touchControls");
 const joystickBase = document.getElementById("joystickBase");
 const joystickThumb = document.getElementById("joystickThumb");
 const fireButton = document.getElementById("fireButton");
+let killstreakCount = 0, killstreakUntil = 0;
+let enemyBarPool = [];
 const mobileInput = {
   movePointer: null, firePointer: null, x: 0, y: 0, mag: 0, fire: false,
   lastMoveDir: new THREE.Vector3(0, 0, -1)
@@ -902,6 +932,8 @@ function makePlayer(idx, x, z, rot) {
   shield.visible = false;
   root.add(shield);
   parts.shield = shield;
+  parts.aimIndicator = makeAimIndicator();
+  root.add(parts.aimIndicator);
   root.userData.parts = parts;
   scene.add(root);
   return root;
@@ -1007,6 +1039,45 @@ function makeSword() {
   const glow = new THREE.PointLight(0xbff8ff, .55, 4); glow.position.x=.8; g.add(glow);
   return g;
 }
+function makeAimIndicator() {
+  const group = new THREE.Group();
+  const aimMat = new THREE.MeshBasicMaterial({
+    color:0x8df7ff, transparent:true, opacity:.72, depthWrite:false, depthTest:true
+  });
+  aimMat.userData.allowFade = true;
+  const stem = new THREE.Mesh(new THREE.BoxGeometry(.08, .035, 1.38), aimMat.clone());
+  stem.position.set(0, .08, -.52);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.32, .035, 8, 28), aimMat.clone());
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, .09, -1.28);
+  const point = new THREE.Mesh(new THREE.ConeGeometry(.18, .48, 3), aimMat.clone());
+  point.rotation.x = -Math.PI / 2;
+  point.position.set(0, .1, -2.04);
+  group.add(stem, ring, point);
+  group.visible = false;
+  group.userData.effect = true;
+  markEffectVisual(group);
+  return group;
+}
+function updateAimIndicator(player) {
+  const indicator = player?.userData?.parts?.aimIndicator;
+  if (!indicator || !player?.userData || player.userData.down || player.userData.hp <= 0 || phase !== "play") {
+    if (indicator) indicator.visible = false;
+    return;
+  }
+  let dir = manualAimDirection(player);
+  if (!finiteVector3(dir) || dir.lengthSq() < .001) dir = forward(player);
+  dir.y = 0;
+  if (dir.lengthSq() < .001) dir.set(0,0,-1);
+  dir.normalize();
+  const worldPos = player.position.clone().addScaledVector(dir, 4.35);
+  worldPos.y = .16;
+  player.updateMatrixWorld(true);
+  indicator.position.copy(player.worldToLocal(worldPos));
+  indicator.rotation.set(0, Math.atan2(-dir.x, -dir.z) - player.rotation.y, 0);
+  indicator.scale.setScalar(1 + Math.sin((last || 0) * 7) * .04);
+  indicator.visible = true;
+}
 function setPlayerWeapon(player, type, now) {
   const u = player.userData;
   const parts = u.parts;
@@ -1029,10 +1100,11 @@ function makeZombie(type, x, z, gate=null) {
   root.add(visualRoot);
   const boss = type === "boss", runner = type === "runner", brute = type === "brute";
   const scale = boss ? 1.95 : brute ? 1.25 : runner ? .88 : 1;
+  const maxHp = boss ? 900 : brute ? 230 : runner ? 70 : 100;
   root.scale.setScalar(scale);
   root.userData = {
     id: nextZombieId++,
-    type, hp: boss?900:brute?230:runner?70:100, max: boss?900:brute?230:runner?70:100,
+    type, hp:maxHp, max:maxHp, maxHp,
     speed: boss?.71:brute?CFG.bruteSpeed:runner?CFG.runnerSpeed:CFG.zombieSpeed, walk:Math.random()*10, hitCD:0, recoil:0, baseScale:scale,
     stun:0, dead:false, flameCD: boss ? rand(2.4, 3.4) : 0, flameWarn:0, flameBurst:0, flameEmit:0, flameTick:0,
     flameDir: new THREE.Vector3(0,0,-1),
@@ -1090,6 +1162,8 @@ function cleanupDynamic() {
   fadeTimer = 0;
   if (fadeOverlay) fadeOverlay.style.opacity = "0";
   hideCenterMessage();
+  resetKillstreak();
+  clearEnemyHealthBars();
 }
 function nextWave() {
   wave++;
@@ -1220,6 +1294,45 @@ function hideCenterMessage() {
   centerMsg.className = "centerMsg hidden";
   centerMsgTimer = 0;
 }
+function killstreakLabel(count) {
+  if (count >= 15) return "RIFT REAPER";
+  if (count >= 10) return "UNSTOPPABLE";
+  if (count >= 5) return "RAMPAGE";
+  if (count >= 3) return "KILLSTREAK";
+  return "";
+}
+function resetKillstreak() {
+  killstreakCount = 0;
+  killstreakUntil = 0;
+  if (!killstreakEl) return;
+  killstreakEl.textContent = "";
+  killstreakEl.classList.add("hidden");
+  killstreakEl.classList.remove("pulse");
+}
+function updateKillstreakHud(pulse=false) {
+  if (!killstreakEl) return;
+  const label = killstreakLabel(killstreakCount);
+  if (!label) {
+    killstreakEl.classList.add("hidden");
+    return;
+  }
+  killstreakEl.textContent = `${label} x${killstreakCount}`;
+  killstreakEl.classList.remove("hidden");
+  if (pulse) {
+    killstreakEl.classList.remove("pulse");
+    void killstreakEl.offsetWidth;
+    killstreakEl.classList.add("pulse");
+  }
+}
+function registerKillstreak(now=last || 0) {
+  killstreakCount = now <= killstreakUntil ? killstreakCount + 1 : 1;
+  killstreakUntil = now + 3;
+  updateKillstreakHud(true);
+}
+function updateKillstreak(now) {
+  if (killstreakCount > 0 && now > killstreakUntil) resetKillstreak();
+  else updateKillstreakHud(false);
+}
 
 function circleHitsWall(x, z, radius) {
   return wallBounds.some(w => {
@@ -1341,6 +1454,7 @@ function update(dt, now) {
     if (centerMsgTimer <= 0) hideCenterMessage();
   }
   updateFade(dt);
+  updateKillstreak(now);
   screenShake = Math.max(0, screenShake - dt * 1.7);
   survivalSeconds = Math.max(0, now - survivalStart);
   if (players.length && players.every(p => p.userData.down || p.userData.hp <= 0)) endGame();
@@ -1371,6 +1485,7 @@ function updatePlayers(dt, now) {
     if (u.down || u.hp <= 0) {
       u.down = true;
       if (u.parts?.shield) u.parts.shield.visible = false;
+      if (u.parts?.aimIndicator) u.parts.aimIndicator.visible = false;
       u.moving = 0;
       p.rotation.z = THREE.MathUtils.lerp(p.rotation.z, .9, dt * 5);
       return;
@@ -1408,6 +1523,7 @@ function updatePlayers(dt, now) {
     u.walk += (movingAmount*9 + .7) * dt;
     animateHumanoid(p, u.walk, u.moving, u.recoil);
     if (u.parts?.shield) u.parts.shield.visible = now < u.shieldUntil;
+    updateAimIndicator(p);
     const cd = u.weapon === "sword" ? CFG.swordCD : u.weapon === "crossbow" ? CFG.crossbowCD : now < u.rapidUntil ? CFG.shootCD * .42 : CFG.shootCD;
     if ((mobileInput.fire || keys.Space || keys.Enter) && now-u.lastShot > cd) shoot(p, now);
   });
@@ -1648,6 +1764,61 @@ function updateBossHealthBar(z) {
   const pct = THREE.MathUtils.clamp(z.userData.hp / z.userData.max, 0, 1);
   fill.scale.x = Math.max(.02, pct);
   fill.position.x = -1.36 * (1 - pct);
+}
+function enemyHealthColor(pct) {
+  if (pct > .55) return "#70ef68";
+  if (pct > .25) return "#f2cf52";
+  return "#ff5f4f";
+}
+function getEnemyHealthBar(index) {
+  if (enemyBarPool[index]) return enemyBarPool[index];
+  const bar = document.createElement("div");
+  bar.className = "enemyHp";
+  const fill = document.createElement("div");
+  fill.className = "enemyHpFill";
+  bar.appendChild(fill);
+  enemyBars.appendChild(bar);
+  enemyBarPool[index] = bar;
+  return bar;
+}
+function clearEnemyHealthBars() {
+  enemyBarPool.forEach(bar => {
+    bar.style.display = "none";
+    bar.style.transform = "translate3d(-9999px, -9999px, 0)";
+  });
+}
+function updateEnemyHealthBars(camera) {
+  if (!enemyBars || !camera || phase !== "play") {
+    clearEnemyHealthBars();
+    return;
+  }
+  camera.updateMatrixWorld();
+  let used = 0;
+  const width = innerWidth, height = innerHeight;
+  zombies.forEach(z => {
+    const u = z.userData;
+    if (!z.visible || u.dead || u.hp <= 0) return;
+    const maxHp = Math.max(.001, u.maxHp || u.max || u.hp || 1);
+    const pct = THREE.MathUtils.clamp(u.hp / maxHp, 0, 1);
+    const world = z.position.clone();
+    world.y += (u.type === "boss" ? 4.85 : 4.15) * (z.scale?.y || 1);
+    const screen = world.project(camera);
+    if (!finiteNumber(screen.x) || !finiteNumber(screen.y) || screen.z < -1 || screen.z > 1) return;
+    const x = (screen.x * .5 + .5) * width;
+    const y = (-screen.y * .5 + .5) * height;
+    if (x < -40 || x > width + 40 || y < 0 || y > height + 24) return;
+    const bar = getEnemyHealthBar(used++);
+    bar.className = `enemyHp${u.type === "boss" ? " boss" : ""}`;
+    bar.style.display = "block";
+    bar.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    const fill = bar.firstElementChild;
+    fill.style.transform = `scaleX(${Math.max(.03, pct)})`;
+    fill.style.background = enemyHealthColor(pct);
+  });
+  for (let i = used; i < enemyBarPool.length; i++) {
+    enemyBarPool[i].style.display = "none";
+    enemyBarPool[i].style.transform = "translate3d(-9999px, -9999px, 0)";
+  }
 }
 function startBossIntro(z, pos) {
   const u = z.userData;
@@ -1932,6 +2103,7 @@ function killZombie(z) {
   maybeDropPowerup(pos, u.type === "boss" ? 1 : .2);
   makeCorpse(pos, u.type);
   score += u.type === "boss" ? 160 : 20;
+  registerKillstreak(last || 0);
   scene.remove(z);
   zombies = zombies.filter(o => o !== z);
 }
@@ -2308,6 +2480,7 @@ function render(now) {
   cam.fov = h >= w ? 72 : 66;
   cam.updateProjectionMatrix();
   if (p) placeCamera(cam,p);
+  updateEnemyHealthBars(cam);
   renderer.setViewport(0,0,w,h);
   renderer.setScissor(0,0,w,h);
   renderer.render(scene,cam);
